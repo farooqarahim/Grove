@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "crates/grove-core",
-  "crates/grove-cli",
+  "crates/grove-cli-old",
   "crates/grove-gui/src-tauri",
   "crates/grove-mcp-server",
   "crates/grove-filter",
