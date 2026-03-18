@@ -55,9 +55,10 @@ members = [
   "crates/grove-cli",
   # … existing members unchanged
 ]
+default-members = ["crates/grove-cli"]
 ```
 
-`default-members` switches to `grove-cli`.
+`default-members` ensures `cargo build` and `cargo install` default to the new CLI, not the archived one.
 
 ---
 
@@ -151,7 +152,7 @@ grove subtasks [run-id] [--json]
 grove sessions <run-id> [--json]
 ```
 
-### 6.3 Git
+### 6.3 Git (top-level command with subcommands)
 
 ```
 grove git status [--json]
@@ -375,6 +376,11 @@ crossterm   = { version = "0.28", optional = true }
 
 - **CI/server install:** `cargo install grove-cli` — lean binary, no TUI deps
 - **Dev install:** `cargo install grove-cli --features tui` — full binary with dashboard
+
+**TUI availability at runtime:**
+- Without `--features tui`: `grove tui` and `--watch` flags are compiled out and will not appear in `--help`.
+- If a user attempts to invoke them from a lean binary, print a clean error: `"TUI mode requires feature 'tui'. Reinstall with: cargo install grove-cli --features tui"`
+- CI must test the lean build to prevent silent regression (lean build must still compile and run cleanly).
 
 ---
 
