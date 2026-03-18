@@ -1,0 +1,36 @@
+[package]
+name         = "grove-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "grove"
+path = "src/main.rs"
+
+[features]
+default = []
+tui = ["dep:ratatui", "dep:crossterm"]
+
+[dependencies]
+grove-core   = { path = "../grove-core" }
+clap         = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+thiserror    = { workspace = true }
+tokio        = { workspace = true }
+anyhow       = { workspace = true }
+dirs         = { workspace = true }
+which        = { workspace = true }
+console      = "0.15"
+indicatif    = "0.17"
+tabled       = "0.15"
+ratatui      = { version = "0.27", optional = true }
+crossterm    = { version = "0.27", optional = true }
+
+[dev-dependencies]
+tempfile     = { workspace = true }
+assert_cmd   = { workspace = true }
+predicates   = { workspace = true }

@@ -2,10 +2,12 @@
 members = [
   "crates/grove-core",
   "crates/grove-cli-old",
+  "crates/grove-cli",
   "crates/grove-gui/src-tauri",
   "crates/grove-mcp-server",
   "crates/grove-filter",
 ]
+default-members = ["crates/grove-cli"]
 exclude = [
   "crates/grove-db-lookup",
 ]
