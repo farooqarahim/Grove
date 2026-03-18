@@ -1,0 +1,16 @@
+[package]
+name = "grove-filter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "grove-filter"
+path = "src/main.rs"
+
+[dependencies]
+grove-core = { path = "../grove-core" }
+serde_json.workspace = true
+libc.workspace = true

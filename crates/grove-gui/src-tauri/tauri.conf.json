@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/v2/crates/tauri-config-schema/schema.json",
+  "productName": "Grove",
+  "version": "0.1.1",
+  "identifier": "com.grove.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Grove",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "mainBinaryName": "Grove",
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGRENEODA2RjQ1RTM3REEKUldUYU4xNzBCdGpjdjJNSXZIQzIraTBROWk2TUE5NjluU3JYZXFib1V4Y1dFbkhkS1p4cWVsTXAK",
+      "endpoints": [
+        "https://github.com/Grove-Tools/grove-loom/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

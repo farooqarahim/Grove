@@ -1,0 +1,4 @@
+smoke:
+  - grove init
+  - grove run "demo objective" --dry-run
+

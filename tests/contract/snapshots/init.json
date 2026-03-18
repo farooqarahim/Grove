@@ -1,0 +1,7 @@
+{
+  "project_root": "<abs-path>",
+  "grove_dir": "<abs-path>/.grove",
+  "db_path": "<abs-path>/.grove/grove.db",
+  "schema_version": 1,
+  "created": true
+}

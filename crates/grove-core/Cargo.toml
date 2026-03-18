@@ -1,0 +1,165 @@
+[package]
+name = "grove-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+ignore.workspace = true
+chrono.workspace = true
+regex.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+which.workspace = true
+reqwest.workspace = true
+dirs.workspace = true
+keyring.workspace = true
+base64.workspace = true
+libc.workspace = true
+gix.workspace = true
+bstr.workspace = true
+portable-pty.workspace = true
+globset.workspace = true
+r2d2.workspace = true
+r2d2_sqlite.workspace = true
+tokio.workspace = true
+cron.workspace = true
+axum.workspace = true
+tower.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+notify-rust.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+serde_json.workspace = true
+os_pipe = "1"
+libc.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "cli_benchmarks"
+harness = false
+
+# ── Unit tests ────────────────────────────────────────────────────────────────
+[[test]]
+name = "state_machine_tests"
+path = "../../tests/unit/state_machine_tests.rs"
+
+[[test]]
+name = "config_validation_tests"
+path = "../../tests/unit/config_validation_tests.rs"
+
+[[test]]
+name = "budget_policy_tests"
+path = "../../tests/unit/budget_policy_tests.rs"
+
+[[test]]
+name = "ownership_registry_tests"
+path = "../../tests/unit/ownership_registry_tests.rs"
+
+# ── Integration tests ─────────────────────────────────────────────────────────
+[[test]]
+name = "db_migration_runner_tests"
+path = "../../tests/integration/db_migration_runner_tests.rs"
+
+[[test]]
+name = "worktree_manager_tests"
+path = "../../tests/integration/worktree_manager_tests.rs"
+
+[[test]]
+name = "merge_queue_tests"
+path = "../../tests/integration/merge_queue_tests.rs"
+
+[[test]]
+name = "writer_contention_tests"
+path = "../../tests/integration/writer_contention_tests.rs"
+
+[[test]]
+name = "wal_checkpoint_tests"
+path = "../../tests/integration/wal_checkpoint_tests.rs"
+
+[[test]]
+name = "mail_signal_fallback_tests"
+path = "../../tests/integration/mail_signal_fallback_tests.rs"
+
+[[test]]
+name = "audit_trigger_tests"
+path = "../../tests/integration/audit_trigger_tests.rs"
+
+[[test]]
+name = "events_error_path_tests"
+path = "../../tests/integration/events_error_path_tests.rs"
+
+[[test]]
+name = "orchestrator_e2e_tests"
+path = "../../tests/integration/orchestrator_e2e_tests.rs"
+
+[[test]]
+name = "worktree_hash_tests"
+path = "../../tests/integration/worktree_hash_tests.rs"
+
+[[test]]
+name = "git_worktree_merge_tests"
+path = "../../tests/integration/git_worktree_merge_tests.rs"
+
+[[test]]
+name = "task_wave_git_merge_tests"
+path = "../../tests/integration/task_wave_git_merge_tests.rs"
+
+[[test]]
+name = "orchestrator_new_apis_tests"
+path = "../../tests/integration/orchestrator_new_apis_tests.rs"
+
+[[test]]
+name = "f11_worktree_consolidation_tests"
+path = "../../tests/integration/f11_worktree_consolidation_tests.rs"
+
+[[test]]
+name = "chaos_tests"
+path = "../../tests/integration/chaos_tests.rs"
+
+[[test]]
+name = "full_workflow_e2e_tests"
+path = "../../tests/integration/full_workflow_e2e_tests.rs"
+
+[[test]]
+name = "issue_board_tests"
+path = "../../tests/integration/issue_board_tests.rs"
+
+[[test]]
+name = "git_parallel_commit_tests"
+path = "../../tests/integration/git_parallel_commit_tests.rs"
+
+[[test]]
+name = "publish_flow_tests"
+path = "../../tests/integration/publish_flow_tests.rs"
+
+[[test]]
+name = "conversation_sync_tests"
+path = "../../tests/integration/conversation_sync_tests.rs"
+
+[[test]]
+name = "orchestrator_error_paths_tests"
+path = "../../tests/integration/orchestrator_error_paths_tests.rs"
+
+[[test]]
+name = "concurrency_tests"
+path = "../../tests/integration/concurrency_tests.rs"
+
+[[test]]
+name = "signal_handling_tests"
+path = "../../tests/integration/signal_handling_tests.rs"
+
+[[test]]
+name = "query_plan_tests"
+path = "../../tests/integration/query_plan_tests.rs"

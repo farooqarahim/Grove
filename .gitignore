@@ -1,0 +1,48 @@
+# Rust build artifacts
+/target
+**/target/
+**/*.rs.bk
+
+# Grove project-specific
+.grove/
+.grove-signing-key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node.js (Tauri frontend)
+node_modules/
+dist/
+.vite/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Debug / profiling
+*.pdb
+perf.data
+perf.data.old
+flamegraph.svg
+
+# Coverage
+*.profraw
+*.profdata
+lcov.info
+tarpaulin-report.html
+coverage/
+
+# Cargo lock for libraries (keep for binaries)
+# Cargo.lock is intentionally tracked for this binary project
+
+# Logs
+*.log

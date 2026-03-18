@@ -1,0 +1,33 @@
+[package]
+name = "grove-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+grove-core = { path = "../../grove-core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
+portable-pty.workspace = true
+pty-process = { workspace = true }
+rusqlite.workspace = true
+uuid.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+dirs.workspace = true
+which.workspace = true
+chrono.workspace = true
+tokio = { workspace = true }
+parking_lot.workspace = true
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

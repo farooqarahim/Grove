@@ -1,0 +1,11 @@
+targets:
+  cli_startup_ms: 100
+  db_initialize_ms: 50
+  config_load_ms: 20
+  status_query_ms: 200
+  agent_spawn_ms: 1000
+
+enforcement:
+  tool: criterion
+  command: "cargo bench -p grove-core -- --output-format bencher"
+  fail_on_regression_percent: 20

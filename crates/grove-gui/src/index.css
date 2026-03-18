@@ -1,0 +1,273 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: #15171E;
+    color: #FFFFFF;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button {
+    border: none;
+  }
+}
+
+/* ── Animations ──────────────────────────────────────────── */
+
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 500px; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes stream-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+@keyframes stream-dot {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.8); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.6; }
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #292D35 transparent;
+}
+
+/* ── Select / details resets ─────────────────────────────── */
+
+select { background-image: none !important; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::marker { display: none; content: ""; }
+details[open] .adv-chev { transform: rotate(90deg); }
+
+/* ── Component utilities ─────────────────────────────────── */
+
+@layer components {
+  /* Resize handle glow */
+  .resize-line:hover,
+  .resize-line:active,
+  .rz:hover,
+  .rz:active {
+    background: rgba(49,185,123,0.25) !important;
+  }
+
+  /* Session items */
+  .session-item {
+    @apply transition-colors duration-fast;
+  }
+  .session-item:hover {
+    background: #24272F !important;
+  }
+  .session-item.active {
+    background: #292D35 !important;
+  }
+  .session-item.active:hover {
+    background: #2F333B !important;
+  }
+
+  /* NavRail buttons */
+  .nav-btn {
+    @apply transition-all;
+  }
+  .nav-btn:hover:not(.nav-active) {
+    background: #24272F;
+    color: #FFFFFF;
+  }
+
+  /* Interactive rows */
+  .hover-row {
+    @apply transition-colors duration-fast;
+  }
+  .hover-row:hover {
+    background: #24272F;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply transition-all;
+    border: none;
+  }
+  .btn-ghost:hover {
+    background: rgba(255,255,255,0.04);
+  }
+
+  /* Accent button */
+  .btn-accent {
+    @apply transition-all;
+  }
+  .btn-accent:hover {
+    filter: brightness(1.12);
+  }
+
+  /* Run card */
+  .run-card {
+    @apply transition-all;
+  }
+  .run-card:hover {
+    background: rgba(255,255,255,0.025) !important;
+  }
+
+  /* Activity rows */
+  .activity-row {
+    @apply transition-colors duration-fast;
+  }
+  .activity-row:hover {
+    background: rgba(255,255,255,0.02) !important;
+  }
+
+  /* Run card action buttons (bordered) */
+  .rc-action-btn {
+    @apply transition-all;
+  }
+  .rc-action-btn:hover {
+    background: #24272F !important;
+    border-color: #363A43 !important;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255,255,255,0.06) 40%,
+      rgba(255,255,255,0.10) 50%,
+      rgba(255,255,255,0.06) 60%,
+      transparent 100%
+    );
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  /* Spinner */
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.06);
+    border-top-color: #31B97B;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  /* Smooth expand */
+  .expand-section {
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  /* File tree item */
+  .file-item {
+    @apply transition-colors duration-fast;
+  }
+  .file-item:hover {
+    background: #24272F;
+  }
+
+  /* Tab button — active indicator via ::after */
+  .tab-btn {
+    position: relative;
+    @apply transition-all;
+  }
+  .tab-btn::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: transparent;
+    border-radius: 2px 2px 0 0;
+    transition: background 0.2s;
+  }
+  .tab-btn.active::after {
+    background: #31B97B;
+  }
+  .tab-btn:hover {
+    color: #FFFFFF;
+  }
+
+  /* RunCard action buttons (bordered) */
+  .action-btn {
+    @apply transition-all;
+  }
+  .action-btn:hover {
+    background: #24272F !important;
+    border-color: #363A43 !important;
+  }
+
+  /* Provider card */
+  .provider-card {
+    @apply transition-colors;
+  }
+  .provider-card:hover {
+    background: #24272F !important;
+  }
+
+  /* Focus ring — uses color change instead of border */
+  input:focus, textarea:focus, select:focus {
+    background: #292D35 !important;
+    outline: none;
+  }
+
+  /* Smooth scrolling */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+  }
+
+  /* Label style utility */
+  .label {
+    @apply text-2xs font-semibold text-t4 uppercase tracking-wider mb-1.5;
+  }
+
+  /* Stat number */
+  .stat-value {
+    @apply text-2xl font-extrabold text-t1 tabular-nums;
+  }
+}

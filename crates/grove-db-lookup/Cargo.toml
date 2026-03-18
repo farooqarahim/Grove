@@ -1,0 +1,14 @@
+[package]
+name = "grove-db-lookup"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }
+dirs = "5"
+glob = "0.3"
