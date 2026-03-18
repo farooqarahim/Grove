@@ -78,6 +78,10 @@ impl Transport for DirectTransport {
         grove_core::orchestrator::cancel_task(&self.project, task_id).map_err(CliError::Core)
     }
 
+    fn drain_queue(&self, _project: &std::path::Path) -> CliResult<()> {
+        Err(CliError::Other("drain_queue not available in direct mode".into()))
+    }
+
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {
         let task = grove_core::orchestrator::queue_task(
             &self.project,

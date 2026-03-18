@@ -73,6 +73,7 @@ pub trait Transport {
     ) -> CliResult<grove_core::orchestrator::TaskRecord>;
     fn cancel_task(&self, task_id: &str) -> CliResult<()>;
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult>;
+    fn drain_queue(&self, project: &std::path::Path) -> CliResult<()>;
     // Tasks 9–15 add more methods here. Update all 3 impls + TestTransport each time.
 }
 
@@ -207,6 +208,15 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.start_run(req),
         }
     }
+
+    fn drain_queue(&self, project: &std::path::Path) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.drain_queue(project),
+            GroveTransport::Socket(t) => t.drain_queue(project),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.drain_queue(project),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -256,15 +266,19 @@ impl Transport for TestTransport {
         _pipeline: Option<&str>,
         _permission_mode: Option<&str>,
     ) -> CliResult<grove_core::orchestrator::TaskRecord> {
-        Err(CliError::Other("not implemented in test transport".into()))
+        Err(CliError::Other("not implemented".into()))
     }
 
     fn cancel_task(&self, _task_id: &str) -> CliResult<()> {
-        Err(CliError::Other("not implemented in test transport".into()))
+        Err(CliError::Other("not implemented".into()))
     }
 
     fn start_run(&self, _req: StartRunRequest) -> CliResult<RunResult> {
-        Err(CliError::Other("not implemented in test transport".into()))
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn drain_queue(&self, _project: &std::path::Path) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
     }
 }
 

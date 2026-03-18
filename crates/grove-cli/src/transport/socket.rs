@@ -74,4 +74,8 @@ impl Transport for SocketTransport {
     fn start_run(&self, _req: StartRunRequest) -> CliResult<RunResult> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
+
+    fn drain_queue(&self, _project: &std::path::Path) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
 }

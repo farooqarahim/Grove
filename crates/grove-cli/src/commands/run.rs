@@ -46,7 +46,6 @@ pub fn run_cmd(args: RunArgs, transport: GroveTransport, mode: OutputMode) -> Cl
             "{}",
             serde_json::json!({
                 "run_id": result.run_id,
-                "task_id": result.task_id,
                 "state": result.state,
                 "objective": result.objective,
             })
