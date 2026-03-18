@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)] // Variants used by CLI commands (Tasks 6+)
 pub enum CliError {
     // grove_core::GroveError is re-exported via grove_core::lib.rs
     #[error("grove-core: {0}")]
