@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{CliError, CliResult};
-use super::Transport;
+use super::{RunResult, StartRunRequest, Transport};
 
 pub struct DirectTransport {
     project: PathBuf,
@@ -23,7 +23,7 @@ impl Transport for DirectTransport {
 
     // Stubs — will be filled in Tasks 7–15
     fn list_tasks(&self) -> CliResult<Vec<grove_core::orchestrator::TaskRecord>> {
-        Err(CliError::Other("not yet implemented".into()))
+        grove_core::orchestrator::list_tasks(&self.project).map_err(CliError::Core)
     }
 
     fn get_workspace(
@@ -47,5 +47,58 @@ impl Transport for DirectTransport {
 
     fn list_issues(&self) -> CliResult<Vec<serde_json::Value>> {
         Err(CliError::Other("not yet implemented".into()))
+    }
+
+    fn queue_task(
+        &self,
+        objective: &str,
+        priority: i64,
+        model: Option<&str>,
+        conversation_id: Option<&str>,
+        pipeline: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> CliResult<grove_core::orchestrator::TaskRecord> {
+        grove_core::orchestrator::queue_task(
+            &self.project,
+            objective,
+            None,          // budget_usd
+            priority,
+            model,
+            None,          // provider
+            conversation_id,
+            None,          // resume_provider_session_id
+            pipeline,
+            permission_mode,
+            false,         // disable_phase_gates
+        )
+        .map_err(CliError::Core)
+    }
+
+    fn cancel_task(&self, task_id: &str) -> CliResult<()> {
+        grove_core::orchestrator::cancel_task(&self.project, task_id).map_err(CliError::Core)
+    }
+
+    fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {
+        let task = grove_core::orchestrator::queue_task(
+            &self.project,
+            &req.objective,
+            None,                                   // budget_usd
+            0,                                      // priority (default)
+            req.model.as_deref(),
+            None,                                   // provider
+            req.conversation_id.as_deref(),
+            None,                                   // resume_provider_session_id
+            req.pipeline.as_deref(),
+            req.permission_mode.as_deref(),
+            false,                                  // disable_phase_gates
+        )
+        .map_err(CliError::Core)?;
+
+        Ok(RunResult {
+            run_id: task.run_id.clone().unwrap_or_else(|| task.id.clone()),
+            task_id: task.id.clone(),
+            state: task.state.clone(),
+            objective: task.objective.clone(),
+        })
     }
 }

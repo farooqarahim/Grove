@@ -2,6 +2,8 @@ pub mod direct;
 pub mod socket;
 
 use crate::error::CliResult;
+#[cfg(test)]
+use crate::error::CliError;
 
 // ── Verified grove-core type paths ──────────────────────────────────────────
 // grove_core::orchestrator::RunRecord    — orchestrator/mod.rs
@@ -15,6 +17,32 @@ use crate::error::CliResult;
 //   1. DirectTransport impl   — real grove-core call
 //   2. SocketTransport impl   — socket stub (Err for now)
 //   3. TestTransport impl     — Ok(default) or Err as appropriate
+
+/// Parameters for the `run` command — queues a task and returns its initial state.
+pub struct StartRunRequest {
+    pub objective: String,
+    pub pipeline: Option<String>,
+    pub model: Option<String>,
+    pub permission_mode: Option<String>,
+    pub conversation_id: Option<String>,
+    /// Reserved for future use (continue from last session).
+    #[allow(dead_code)]
+    pub continue_last: bool,
+    /// Reserved for future use (link to an issue).
+    #[allow(dead_code)]
+    pub issue_id: Option<String>,
+    /// Reserved for future use (limit parallel agent count).
+    #[allow(dead_code)]
+    pub max_agents: Option<u16>,
+}
+
+/// Result returned by `start_run` — sourced from the newly-queued TaskRecord.
+pub struct RunResult {
+    pub run_id: String,
+    pub task_id: String,
+    pub state: String,
+    pub objective: String,
+}
 
 /// Sync transport trait. Grows as commands are implemented in Tasks 8–15.
 /// ⚠️  list_tasks() has NO limit — apply limit client-side in the command handler.
@@ -32,7 +60,20 @@ pub trait Transport {
         limit: i64,
     ) -> CliResult<Vec<grove_core::db::repositories::conversations_repo::ConversationRow>>;
     fn list_issues(&self) -> CliResult<Vec<serde_json::Value>>;
-    // Tasks 8–15 add more methods here. Update all 3 impls + TestTransport each time.
+
+    // ── Task 8 mutation methods ──────────────────────────────────────────────
+    fn queue_task(
+        &self,
+        objective: &str,
+        priority: i64,
+        model: Option<&str>,
+        conversation_id: Option<&str>,
+        pipeline: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> CliResult<grove_core::orchestrator::TaskRecord>;
+    fn cancel_task(&self, task_id: &str) -> CliResult<()>;
+    fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult>;
+    // Tasks 9–15 add more methods here. Update all 3 impls + TestTransport each time.
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -125,6 +166,47 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.list_issues(),
         }
     }
+
+    fn queue_task(
+        &self,
+        objective: &str,
+        priority: i64,
+        model: Option<&str>,
+        conversation_id: Option<&str>,
+        pipeline: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> CliResult<grove_core::orchestrator::TaskRecord> {
+        match self {
+            GroveTransport::Direct(t) => {
+                t.queue_task(objective, priority, model, conversation_id, pipeline, permission_mode)
+            }
+            GroveTransport::Socket(t) => {
+                t.queue_task(objective, priority, model, conversation_id, pipeline, permission_mode)
+            }
+            #[cfg(test)]
+            GroveTransport::Test(t) => {
+                t.queue_task(objective, priority, model, conversation_id, pipeline, permission_mode)
+            }
+        }
+    }
+
+    fn cancel_task(&self, task_id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.cancel_task(task_id),
+            GroveTransport::Socket(t) => t.cancel_task(task_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.cancel_task(task_id),
+        }
+    }
+
+    fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {
+        match self {
+            GroveTransport::Direct(t) => t.start_run(req),
+            GroveTransport::Socket(t) => t.start_run(req),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.start_run(req),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -163,6 +245,26 @@ impl Transport for TestTransport {
 
     fn list_issues(&self) -> CliResult<Vec<serde_json::Value>> {
         Ok(vec![])
+    }
+
+    fn queue_task(
+        &self,
+        _objective: &str,
+        _priority: i64,
+        _model: Option<&str>,
+        _conversation_id: Option<&str>,
+        _pipeline: Option<&str>,
+        _permission_mode: Option<&str>,
+    ) -> CliResult<grove_core::orchestrator::TaskRecord> {
+        Err(CliError::Other("not implemented in test transport".into()))
+    }
+
+    fn cancel_task(&self, _task_id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented in test transport".into()))
+    }
+
+    fn start_run(&self, _req: StartRunRequest) -> CliResult<RunResult> {
+        Err(CliError::Other("not implemented in test transport".into()))
     }
 }
 

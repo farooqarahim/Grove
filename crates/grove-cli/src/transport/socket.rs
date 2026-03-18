@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::error::{CliError, CliResult};
-use super::Transport;
+use super::{RunResult, StartRunRequest, Transport};
 
 pub struct SocketTransport {
     sock_path: PathBuf,
@@ -52,6 +52,26 @@ impl Transport for SocketTransport {
     }
 
     fn list_issues(&self) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn queue_task(
+        &self,
+        _objective: &str,
+        _priority: i64,
+        _model: Option<&str>,
+        _conversation_id: Option<&str>,
+        _pipeline: Option<&str>,
+        _permission_mode: Option<&str>,
+    ) -> CliResult<grove_core::orchestrator::TaskRecord> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn cancel_task(&self, _task_id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn start_run(&self, _req: StartRunRequest) -> CliResult<RunResult> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
 }
