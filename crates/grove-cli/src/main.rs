@@ -1,3 +1,12 @@
+mod error;
+
 fn main() {
-    println!("grove");
+    if let Err(e) = run() {
+        eprintln!("error: {e}");
+        std::process::exit(e.exit_code());
+    }
+}
+
+fn run() -> error::CliResult<()> {
+    Ok(())
 }
