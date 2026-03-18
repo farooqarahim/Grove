@@ -98,11 +98,12 @@ impl Transport for DirectTransport {
         )
         .map_err(CliError::Core)?;
 
+        let task_id = task.id;
         Ok(RunResult {
-            run_id: task.run_id.clone().unwrap_or_else(|| task.id.clone()),
-            task_id: task.id.clone(),
-            state: task.state.clone(),
-            objective: task.objective.clone(),
+            run_id: task.run_id.unwrap_or_else(|| task_id.clone()),
+            task_id,
+            state: task.state,
+            objective: task.objective,
         })
     }
 }

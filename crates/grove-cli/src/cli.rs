@@ -112,7 +112,7 @@ pub struct QueueArgs {
 
 #[derive(Debug, Args)]
 pub struct TasksArgs {
-    #[arg(long, default_value_t = 50)]
+    #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(i64).range(1..))]
     pub limit: i64,
     #[arg(long)]
     pub refresh: bool,
