@@ -1,5 +1,6 @@
 mod error;
 mod output;
+mod transport;
 
 fn main() {
     if let Err(e) = run() {
