@@ -282,8 +282,8 @@ fn filter_status(text: &str, level: u8) -> String {
     let mut branch = String::new();
 
     for line in text.lines() {
-        if line.starts_with("## ") {
-            branch = line[3..].to_string();
+        if let Some(stripped) = line.strip_prefix("## ") {
+            branch = stripped.to_string();
         } else if line.starts_with("On branch ") {
             branch = line.strip_prefix("On branch ").unwrap_or("").to_string();
         } else if line.starts_with("??") || line.contains("Untracked") {

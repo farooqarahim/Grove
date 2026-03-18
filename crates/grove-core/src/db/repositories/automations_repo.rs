@@ -36,7 +36,7 @@ pub fn insert_automation(conn: &Connection, a: &AutomationDef) -> GroveResult<()
     let notifications_json: Option<String> = a
         .notifications
         .as_ref()
-        .map(|n| serde_json::to_string(n))
+        .map(serde_json::to_string)
         .transpose()
         .map_err(|e| GroveError::Runtime(e.to_string()))?;
     conn.execute(
@@ -128,7 +128,7 @@ pub fn update_automation(conn: &Connection, a: &AutomationDef) -> GroveResult<()
     let notifications_json: Option<String> = a
         .notifications
         .as_ref()
-        .map(|n| serde_json::to_string(n))
+        .map(serde_json::to_string)
         .transpose()
         .map_err(|e| GroveError::Runtime(e.to_string()))?;
     let n = conn.execute(
@@ -408,7 +408,7 @@ pub fn insert_run(conn: &Connection, r: &AutomationRun) -> GroveResult<()> {
     let trigger_info_json: Option<String> = r
         .trigger_info
         .as_ref()
-        .map(|v| serde_json::to_string(v))
+        .map(serde_json::to_string)
         .transpose()
         .map_err(|e| GroveError::Runtime(e.to_string()))?;
     conn.execute(
@@ -491,7 +491,7 @@ fn map_run_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AutomationRun> {
     let state_str: String = r.get(2)?;
     let trigger_info_json: Option<String> = r.get(3)?;
 
-    let state = AutomationRunState::from_str(&state_str).unwrap_or(AutomationRunState::Pending);
+    let state = AutomationRunState::parse(&state_str).unwrap_or(AutomationRunState::Pending);
     let trigger_info: Option<serde_json::Value> = trigger_info_json
         .as_deref()
         .map(serde_json::from_str)
@@ -615,7 +615,7 @@ fn map_run_step_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AutomationRunStep
     let state_str: String = r.get(4)?;
     let condition_result_int: Option<i32> = r.get(7)?;
 
-    let state = StepState::from_str(&state_str).unwrap_or(StepState::Pending);
+    let state = StepState::parse(&state_str).unwrap_or(StepState::Pending);
     let condition_result = condition_result_int.map(|v| v != 0);
 
     Ok(AutomationRunStep {

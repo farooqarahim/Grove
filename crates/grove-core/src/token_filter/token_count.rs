@@ -15,10 +15,6 @@ pub fn model_window_size(model: &str) -> usize {
         1_000_000
     } else if m.contains("claude") {
         200_000
-    } else if m.contains("codex") || m.contains("gpt") || m.contains("o1") || m.contains("o3") {
-        128_000
-    } else if m.contains("deepseek") {
-        128_000
     } else {
         128_000
     }

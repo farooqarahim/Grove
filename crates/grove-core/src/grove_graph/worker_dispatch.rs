@@ -86,6 +86,7 @@ pub fn build_chunk_manifest(phase_objective: &str, graph_id: &str, chunk: &StepC
 ///
 /// NOTE: This is a blocking function (Provider::execute is sync).
 /// Callers in async contexts should wrap in `tokio::task::spawn_blocking`.
+#[allow(clippy::too_many_arguments)]
 pub fn dispatch_worker(
     provider: &Arc<dyn Provider>,
     chunk: &StepChunk,

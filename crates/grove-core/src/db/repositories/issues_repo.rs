@@ -269,7 +269,7 @@ pub fn list(conn: &Connection, project_id: &str, filter: &IssueFilter) -> GroveR
     let rows = stmt
         .query_map(
             rusqlite::params_from_iter(bound_values.iter().map(|s| s.as_str())),
-            |r| row_to_issue(r),
+            row_to_issue,
         )?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)

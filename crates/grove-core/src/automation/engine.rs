@@ -171,7 +171,7 @@ impl WorkflowEngine {
             let deps_satisfied = step_def.depends_on.iter().all(|dep_key| {
                 step_states
                     .get(dep_key)
-                    .and_then(|s| StepState::from_str(s))
+                    .and_then(|s| StepState::parse(s))
                     .map(|st| st == StepState::Completed || st == StepState::Skipped)
                     .unwrap_or(false)
             });

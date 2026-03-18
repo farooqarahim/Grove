@@ -509,29 +509,83 @@ fn parse_modern_system_event(value: &Value, entries: &mut Vec<LogEntry>, line_no
         .and_then(Value::as_str)
         .map(str::to_string);
 
-    match subtype {
-        "init" => {
-            let model = value
-                .get("model")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown");
-            let cwd = value.get("cwd").and_then(Value::as_str).unwrap_or_default();
-            let cwd_path = PathBuf::from(cwd);
-            let cwd_label = cwd_path.file_name().and_then(|s| s.to_str()).unwrap_or(cwd);
-            let permission = value
-                .get("permissionMode")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let mut parts = vec![format!("Session initialized ({model})")];
-            if !cwd_label.is_empty() {
-                parts.push(format!("cwd {cwd_label}"));
+    if subtype == "init" {
+        let model = value
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let cwd = value.get("cwd").and_then(Value::as_str).unwrap_or_default();
+        let cwd_path = PathBuf::from(cwd);
+        let cwd_label = cwd_path.file_name().and_then(|s| s.to_str()).unwrap_or(cwd);
+        let permission = value
+            .get("permissionMode")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let mut parts = vec![format!("Session initialized ({model})")];
+        if !cwd_label.is_empty() {
+            parts.push(format!("cwd {cwd_label}"));
+        }
+        if !permission.is_empty() {
+            parts.push(format!("mode {permission}"));
+        }
+        entries.push(LogEntry {
+            role: "system".to_string(),
+            content: parts.join(" • "),
+            tool_name: None,
+            session_id: session_id.clone(),
+            cost_usd: None,
+            is_error: false,
+            line_no,
+            event_type: Some("system".to_string()),
+            subtype: Some("init".to_string()),
+            detail: None,
+            metadata_json: Some(
+                serde_json::json!({
+                    "model": model,
+                    "cwd": cwd,
+                    "permission_mode": permission,
+                    "output_style": value.get("output_style").and_then(Value::as_str),
+                    "api_key_source": value.get("apiKeySource").and_then(Value::as_str),
+                })
+                .to_string(),
+            ),
+            request_id: None,
+            options: None,
+            blocking: None,
+            status: None,
+            decision: None,
+            timeout_at: None,
+            answer: None,
+        });
+
+        let version = value
+            .get("claude_code_version")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let tools_count = value
+            .get("tools")
+            .and_then(Value::as_array)
+            .map(|items| items.len())
+            .unwrap_or(0);
+        let agents_count = value
+            .get("agents")
+            .and_then(Value::as_array)
+            .map(|items| items.len())
+            .unwrap_or(0);
+        if !version.is_empty() || tools_count > 0 || agents_count > 0 {
+            let mut details = Vec::new();
+            if !version.is_empty() {
+                details.push(format!("Claude Code {version}"));
             }
-            if !permission.is_empty() {
-                parts.push(format!("mode {permission}"));
+            if tools_count > 0 {
+                details.push(format!("{tools_count} tools"));
+            }
+            if agents_count > 0 {
+                details.push(format!("{agents_count} agents"));
             }
             entries.push(LogEntry {
                 role: "system".to_string(),
-                content: parts.join(" • "),
+                content: details.join(" • "),
                 tool_name: None,
                 session_id: session_id.clone(),
                 cost_usd: None,
@@ -539,14 +593,12 @@ fn parse_modern_system_event(value: &Value, entries: &mut Vec<LogEntry>, line_no
                 line_no,
                 event_type: Some("system".to_string()),
                 subtype: Some("init".to_string()),
-                detail: None,
+                detail: Some("Runtime".to_string()),
                 metadata_json: Some(
                     serde_json::json!({
-                        "model": model,
-                        "cwd": cwd,
-                        "permission_mode": permission,
-                        "output_style": value.get("output_style").and_then(Value::as_str),
-                        "api_key_source": value.get("apiKeySource").and_then(Value::as_str),
+                        "claude_code_version": version,
+                        "tools_count": tools_count,
+                        "agents_count": agents_count,
                     })
                     .to_string(),
                 ),
@@ -558,113 +610,58 @@ fn parse_modern_system_event(value: &Value, entries: &mut Vec<LogEntry>, line_no
                 timeout_at: None,
                 answer: None,
             });
-
-            let version = value
-                .get("claude_code_version")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let tools_count = value
-                .get("tools")
-                .and_then(Value::as_array)
-                .map(|items| items.len())
-                .unwrap_or(0);
-            let agents_count = value
-                .get("agents")
-                .and_then(Value::as_array)
-                .map(|items| items.len())
-                .unwrap_or(0);
-            if !version.is_empty() || tools_count > 0 || agents_count > 0 {
-                let mut details = Vec::new();
-                if !version.is_empty() {
-                    details.push(format!("Claude Code {version}"));
-                }
-                if tools_count > 0 {
-                    details.push(format!("{tools_count} tools"));
-                }
-                if agents_count > 0 {
-                    details.push(format!("{agents_count} agents"));
-                }
-                entries.push(LogEntry {
-                    role: "system".to_string(),
-                    content: details.join(" • "),
-                    tool_name: None,
-                    session_id: session_id.clone(),
-                    cost_usd: None,
-                    is_error: false,
-                    line_no,
-                    event_type: Some("system".to_string()),
-                    subtype: Some("init".to_string()),
-                    detail: Some("Runtime".to_string()),
-                    metadata_json: Some(
-                        serde_json::json!({
-                            "claude_code_version": version,
-                            "tools_count": tools_count,
-                            "agents_count": agents_count,
-                        })
-                        .to_string(),
-                    ),
-                    request_id: None,
-                    options: None,
-                    blocking: None,
-                    status: None,
-                    decision: None,
-                    timeout_at: None,
-                    answer: None,
-                });
-            }
-
-            let needs_auth = value
-                .get("mcp_servers")
-                .and_then(Value::as_array)
-                .map(|servers| {
-                    servers
-                        .iter()
-                        .filter_map(|server| {
-                            let status = server.get("status").and_then(Value::as_str)?;
-                            if status == "needs-auth" || status == "unauthorized" {
-                                server
-                                    .get("name")
-                                    .and_then(Value::as_str)
-                                    .map(str::to_string)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            if !needs_auth.is_empty() {
-                entries.push(LogEntry {
-                    role: "system".to_string(),
-                    content: format!(
-                        "Integrations need auth • {}",
-                        compact_text(&needs_auth.join(", "), 120)
-                    ),
-                    tool_name: None,
-                    session_id,
-                    cost_usd: None,
-                    is_error: false,
-                    line_no,
-                    event_type: Some("system".to_string()),
-                    subtype: Some("init".to_string()),
-                    detail: Some("Integrations".to_string()),
-                    metadata_json: Some(
-                        serde_json::json!({
-                            "needs_auth": needs_auth,
-                        })
-                        .to_string(),
-                    ),
-                    request_id: None,
-                    options: None,
-                    blocking: None,
-                    status: None,
-                    decision: None,
-                    timeout_at: None,
-                    answer: None,
-                });
-            }
         }
-        _ => {}
+
+        let needs_auth = value
+            .get("mcp_servers")
+            .and_then(Value::as_array)
+            .map(|servers| {
+                servers
+                    .iter()
+                    .filter_map(|server| {
+                        let status = server.get("status").and_then(Value::as_str)?;
+                        if status == "needs-auth" || status == "unauthorized" {
+                            server
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !needs_auth.is_empty() {
+            entries.push(LogEntry {
+                role: "system".to_string(),
+                content: format!(
+                    "Integrations need auth • {}",
+                    compact_text(&needs_auth.join(", "), 120)
+                ),
+                tool_name: None,
+                session_id,
+                cost_usd: None,
+                is_error: false,
+                line_no,
+                event_type: Some("system".to_string()),
+                subtype: Some("init".to_string()),
+                detail: Some("Integrations".to_string()),
+                metadata_json: Some(
+                    serde_json::json!({
+                        "needs_auth": needs_auth,
+                    })
+                    .to_string(),
+                ),
+                request_id: None,
+                options: None,
+                blocking: None,
+                status: None,
+                decision: None,
+                timeout_at: None,
+                answer: None,
+            });
+        }
     }
 }
 

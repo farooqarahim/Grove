@@ -339,6 +339,7 @@ pub fn delete_graph(conn: &Connection, graph_id: &str) -> GroveResult<()> {
 
 // ── Phase CRUD ──────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 pub fn insert_phase(
     conn: &Connection,
     graph_id: &str,
@@ -443,6 +444,7 @@ pub fn clear_graph_plan(conn: &Connection, graph_id: &str) -> GroveResult<()> {
 
 // ── Step CRUD ───────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 pub fn insert_step(
     conn: &Connection,
     phase_id: &str,

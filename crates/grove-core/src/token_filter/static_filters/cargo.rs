@@ -81,16 +81,14 @@ fn filter_test(text: &str, level: u8) -> String {
         }
 
         // Collect failure details
-        if in_failure_section {
-            if line.starts_with("test ") && line.contains("FAILED") {
-                failures.push(line.to_string());
-            } else if line.contains("panicked at")
+        if in_failure_section
+            && ((line.starts_with("test ") && line.contains("FAILED"))
+                || line.contains("panicked at")
                 || line.contains("assertion")
                 || line.contains("thread '")
-                || line.starts_with("---- ")
-            {
-                failures.push(line.to_string());
-            }
+                || line.starts_with("---- "))
+        {
+            failures.push(line.to_string());
         }
 
         // Individual test FAILED line outside failures section
@@ -208,10 +206,8 @@ fn is_compile_progress(line: &str) -> bool {
 fn extract_count(line: &str, keyword: &str) -> Option<usize> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     for (i, part) in parts.iter().enumerate() {
-        if part.trim_end_matches(';').trim_end_matches(',') == keyword {
-            if i > 0 {
-                return parts[i - 1].parse().ok();
-            }
+        if part.trim_end_matches(';').trim_end_matches(',') == keyword && i > 0 {
+            return parts[i - 1].parse().ok();
         }
     }
     None

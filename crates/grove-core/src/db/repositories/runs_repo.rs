@@ -129,6 +129,7 @@ pub fn update_cost(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_publish(
     conn: &Connection,
     id: &str,

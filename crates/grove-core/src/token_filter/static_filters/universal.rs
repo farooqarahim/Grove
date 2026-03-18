@@ -118,7 +118,7 @@ pub fn truncate_with_hint(text: &str, max_bytes: usize) -> String {
 
     let mut cut_at = max_bytes;
     // Walk back to the nearest newline to avoid splitting a line.
-    while cut_at > 0 && !text.as_bytes().get(cut_at).is_some_and(|&b| b == b'\n') {
+    while cut_at > 0 && text.as_bytes().get(cut_at).is_none_or(|&b| b != b'\n') {
         cut_at -= 1;
     }
     if cut_at == 0 {

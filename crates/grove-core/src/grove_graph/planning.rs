@@ -232,6 +232,7 @@ fn insert_plan_from_json(conn: &Connection, graph_id: &str, plan: &GraphPlan) ->
 
     // ── Pass 1: Insert all phases and steps with empty depends_on ────────────
     // We insert with "[]" first because the dependency targets may not exist yet.
+    #[allow(clippy::type_complexity)]
     let mut phase_step_pairs: Vec<(String, Vec<(String, Vec<String>)>)> = Vec::new();
 
     for phase in &plan.phases {

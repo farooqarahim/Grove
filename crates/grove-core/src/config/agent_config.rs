@@ -86,7 +86,7 @@ pub struct PipelineConfig {
 // ── Skill config ────────────────────────────────────────────────────────────
 
 /// Parsed skill from `skills/<id>/SKILL.md`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SkillConfig {
     pub id: String,
     pub name: String,
@@ -97,18 +97,6 @@ pub struct SkillConfig {
     /// The full Markdown body (after frontmatter).
     #[serde(skip)]
     pub content: String,
-}
-
-impl Default for SkillConfig {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            name: String::new(),
-            description: String::new(),
-            applies_to: Vec::new(),
-            content: String::new(),
-        }
-    }
 }
 
 // ── Loaded config bundle ────────────────────────────────────────────────────

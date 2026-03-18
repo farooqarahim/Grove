@@ -40,7 +40,7 @@ pub struct AgentCatalogEntry {
 /// Returns the full static catalog of all supported agents and their models.
 /// Called by the `get_agent_catalog` Tauri command.
 pub fn all_agents() -> &'static [AgentCatalogEntry] {
-    &CATALOG
+    CATALOG
 }
 
 /// Look up a single entry by provider id.

@@ -1375,6 +1375,7 @@ pub fn run_events(project_root: &Path, run_id: &str) -> GroveResult<Vec<events::
 /// This is the low-level insertion function. It does NOT validate the
 /// conversation — the caller is responsible for ensuring the conversation
 /// exists and is valid. Use `queue_task` for the validated public API.
+#[allow(clippy::too_many_arguments)]
 pub fn insert_queued_task(
     conn: &Connection,
     objective: &str,
@@ -1445,6 +1446,7 @@ pub fn insert_queued_task(
 /// If `conversation_id` is provided, the conversation must exist, be active,
 /// and belong to the same project as `project_root`. This prevents cross-project
 /// conversation leakage and ensures conversations are created before tasks.
+#[allow(clippy::too_many_arguments)]
 pub fn queue_task(
     project_root: &Path,
     objective: &str,
@@ -2648,6 +2650,7 @@ fn register_project_row(
     crate::db::repositories::projects_repo::get(conn, &row.id)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_repo_project(
     provider: &str,
     repo_name: &str,
@@ -3598,6 +3601,7 @@ fn require_run_exists(conn: &Connection, run_id: &str) -> GroveResult<()> {
 /// When `lock_wait_timeout_secs > 0` and the slot is busy, polls with
 /// exponential backoff (1 s → 2 s → 4 s … capped at 30 s) and logs progress
 /// messages until the slot is acquired or the timeout is reached.
+#[allow(clippy::too_many_arguments)]
 fn acquire_run_slot(
     conn: &mut Connection,
     run_id: &str,
@@ -3671,6 +3675,7 @@ fn is_slot_busy_error(msg: &str) -> bool {
 }
 
 /// Single attempt to acquire a run slot — no polling.
+#[allow(clippy::too_many_arguments)]
 fn try_acquire_run_slot(
     conn: &mut Connection,
     run_id: &str,

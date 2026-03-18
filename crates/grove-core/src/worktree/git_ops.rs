@@ -462,7 +462,7 @@ pub fn matches_sparse_patterns(rel_path: &str, patterns: &[String]) -> bool {
             // Support wildcard patterns like "*.toml".
             if pat.contains('*') {
                 let prefix = pat.split('*').next().unwrap_or("");
-                let suffix = pat.split('*').last().unwrap_or("");
+                let suffix = pat.split('*').next_back().unwrap_or("");
                 if rel_path.starts_with(prefix) && rel_path.ends_with(suffix) {
                     return true;
                 }

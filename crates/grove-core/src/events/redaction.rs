@@ -11,6 +11,7 @@ use regex::Regex;
 /// - AWS access key IDs: `AKIA[A-Z0-9]{16}`
 /// - `password=<value>` key-value pairs (case-insensitive)
 /// - `api_key=<value>` / `apikey=<value>` key-value pairs (case-insensitive)
+///
 /// Return `true` if `input` contains any pattern that would be redacted by [`redact`].
 ///
 /// Used by `grove doctor` to retroactively scan stored event payloads for

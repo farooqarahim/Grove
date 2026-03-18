@@ -1016,8 +1016,8 @@ fn run_agents_persistent(
         }
 
         // --- Task decomposition: if architect produced TASKS, replace builder stages ---
-        let stage_has_builder = stage.iter().any(|a| *a == AgentType::Builder);
-        let stage_has_plan_system_design = stage.iter().any(|a| *a == AgentType::PlanSystemDesign);
+        let stage_has_builder = stage.contains(&AgentType::Builder);
+        let stage_has_plan_system_design = stage.contains(&AgentType::PlanSystemDesign);
 
         if stage_has_builder && (stored_decomposition.is_some() || decomposition_executed) {
             if let Some((decomp, _base)) = stored_decomposition.take() {
@@ -1039,7 +1039,7 @@ fn run_agents_persistent(
                     max_agents,
                     project_root,
                     project_configs,
-                    &run_artifacts_dir,
+                    run_artifacts_dir,
                 )?;
             }
             stage_idx += 1;
@@ -1139,7 +1139,7 @@ fn run_agents_persistent(
                     None,
                     project_root,
                     project_configs,
-                    &run_artifacts_dir,
+                    run_artifacts_dir,
                 );
                 let mut instructions = String::new();
                 if !feedback_prefix.is_empty() {
@@ -1342,7 +1342,7 @@ fn run_agents_persistent(
                                         &changed_files,
                                         run_id,
                                         run_worktree_path,
-                                        &run_artifacts_dir,
+                                        run_artifacts_dir,
                                     );
                                 if validation.passed {
                                     sink.on_event(
@@ -1420,7 +1420,7 @@ fn run_agents_persistent(
                         }
 
                         if let Some(artifact_name) =
-                            find_agent_artifact(&run_artifacts_dir, agent_type, run_id)
+                            find_agent_artifact(run_artifacts_dir, agent_type, run_id)
                         {
                             let artifact_path = run_artifacts_dir.join(&artifact_name);
                             if let Ok(bytes) = std::fs::read(&artifact_path) {
@@ -1502,7 +1502,7 @@ fn run_agents_persistent(
                         // Phase gate (persistent channel-based)
                         if pause_after.contains(&agent_type) {
                             let artifact =
-                                find_agent_artifact(&run_artifacts_dir, agent_type, run_id);
+                                find_agent_artifact(run_artifacts_dir, agent_type, run_id);
                             let cp_id = phase_checkpoints_repo::insert(
                                 conn,
                                 run_id,
@@ -1695,10 +1695,10 @@ fn run_agents_persistent(
         }
 
         // --- Verdict routing for Reviewer and Judge ---
-        let stage_has_reviewer = stage.iter().any(|a| *a == AgentType::Reviewer);
+        let stage_has_reviewer = stage.contains(&AgentType::Reviewer);
 
         if stage_has_reviewer {
-            match verdict::parse_review_verdict(&run_artifacts_dir, run_id) {
+            match verdict::parse_review_verdict(run_artifacts_dir, run_id) {
                 Some(ReviewVerdict::Pass) => {
                     tracing::info!("reviewer verdict: PASS — continuing");
                     events::emit(
@@ -1786,10 +1786,10 @@ fn run_agents_persistent(
             }
         }
 
-        let stage_has_judge = stage.iter().any(|a| *a == AgentType::Judge);
+        let stage_has_judge = stage.contains(&AgentType::Judge);
 
         if stage_has_judge {
-            match verdict::parse_judge_verdict(&run_artifacts_dir, run_id) {
+            match verdict::parse_judge_verdict(run_artifacts_dir, run_id) {
                 Some(JudgeVerdict::Approved) => {
                     tracing::info!("judge verdict: APPROVED — pipeline output accepted");
                     events::emit(
@@ -1888,7 +1888,7 @@ fn run_agents_persistent(
         // After a plan_system_design stage, check for TASKS decomposition file
         // in the artifacts directory (where the architect writes it).
         if stage_has_plan_system_design {
-            if let Some(decomp) = task_decomposer::read_tasks_file(&run_artifacts_dir, run_id) {
+            if let Some(decomp) = task_decomposer::read_tasks_file(run_artifacts_dir, run_id) {
                 task_decomposer::insert_subtasks(conn, run_id, &decomp.tasks)?;
                 tracing::info!(
                     count = decomp.tasks.len(),
@@ -1919,6 +1919,7 @@ fn run_agents_persistent(
 
 /// Pre-build all pipeline stage instructions and insert them into the
 /// `pipeline_stages` table so the single CLI can retrieve them via MCP.
+#[allow(clippy::too_many_arguments)]
 fn prebuild_pipeline_stages(
     conn: &Connection,
     run_id: &str,
@@ -2572,7 +2573,7 @@ fn run_task_waves(
                 is_git,
                 project_root,
                 project_configs,
-                &run_artifacts_dir,
+                run_artifacts_dir,
             )?;
         }
     }
@@ -2914,6 +2915,7 @@ fn post_branch_registration_write_back(
 /// Falls back to the hardcoded `instructions::build_agent_instructions()` if
 /// no Markdown config exists for the agent. Appends file context and spawn
 /// instructions to help agents orient in the worktree.
+#[allow(clippy::too_many_arguments)]
 fn build_instructions(
     agent_type: AgentType,
     objective: &str,
@@ -2964,7 +2966,7 @@ fn build_instructions(
         prompt.push_str("\nWork directly against the run objective and any prior handoff context.");
     }
     prompt.push_str(&agent_execution_guardrails(agent_type));
-    prompt.push_str(&spawn::spawn_instructions());
+    prompt.push_str(spawn::spawn_instructions());
     prompt
 }
 

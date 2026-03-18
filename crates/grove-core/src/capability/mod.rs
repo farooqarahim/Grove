@@ -202,14 +202,11 @@ impl ClaudeAuthStatus {
 /// installed CLI does not support `auth status --json`, this returns `Ok(true)`
 /// so older working installs are not blocked by the preflight.
 pub fn is_claude_code_authenticated(command: &str) -> Result<bool, String> {
-    let output = match command_output_with_timeout(
+    let output = command_output_with_timeout(
         command,
         &["auth", "status", "--json"],
         Duration::from_secs(5),
-    ) {
-        Ok(output) => output,
-        Err(err) => return Err(err),
-    };
+    )?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

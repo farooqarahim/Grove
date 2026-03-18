@@ -66,6 +66,7 @@ pub fn write_plan_log(
     Ok(path)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn write_verdict_log(
     project_root: &Path,
     conversation_id: &str,

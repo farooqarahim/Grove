@@ -939,6 +939,7 @@ fn run_with_pipe_interactive(
 
 // ── PTY execution (for agents that check isatty) ──────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn run_with_pty(
     command: &str,
     args: &[String],

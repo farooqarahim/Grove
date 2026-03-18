@@ -122,6 +122,7 @@ pub struct PersistentHost {
 
 impl PersistentHost {
     /// Construct a host backed by a live Claude process (stdin/stdout connected).
+    #[allow(clippy::too_many_arguments)]
     pub fn with_process(
         run_id: String,
         child: Child,

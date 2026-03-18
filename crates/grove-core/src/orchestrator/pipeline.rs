@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::agents::AgentType;
 
 /// The 3 pipeline modes available in Grove.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PipelineKind {
     /// Requirements + design only. No code changes.
@@ -16,6 +16,7 @@ pub enum PipelineKind {
     /// Implementation + quality gates. Use when you already have a plan.
     Build,
     /// Full end-to-end: PRD → Design → Build → Review → Judge.
+    #[default]
     Autonomous,
 }
 
@@ -82,11 +83,6 @@ impl PipelineKind {
     }
 }
 
-impl Default for PipelineKind {
-    fn default() -> Self {
-        PipelineKind::Autonomous
-    }
-}
 
 impl std::fmt::Display for PipelineKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

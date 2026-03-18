@@ -105,7 +105,7 @@ const PASS_THRESHOLD: i64 = 7;
 fn check_runtime_status(conn: &Connection, graph_id: &str) -> GroveResult<Option<StepCycleResult>> {
     let graph = grove_graph_repo::get_graph(conn, graph_id)?;
     let status = RuntimeStatus::try_from(graph.runtime_status.as_str())
-        .map_err(|e| GroveError::Runtime(e))?;
+        .map_err(GroveError::Runtime)?;
 
     match status {
         RuntimeStatus::Paused => {

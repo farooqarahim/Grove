@@ -717,7 +717,7 @@ impl ClaudeCodeProvider {
             let stderr_handle = child
                 .stderr
                 .take()
-                .map(|se| {
+                .and_then(|se| {
                     std::thread::Builder::new()
                         .name("claude-stderr".into())
                         .spawn(move || {
@@ -728,8 +728,7 @@ impl ClaudeCodeProvider {
                             buf
                         })
                         .ok()
-                })
-                .flatten();
+                });
 
             // Emit a system event so the UI shows something while waiting for API response.
             sink.on_event(StreamOutputEvent::System {
@@ -944,7 +943,7 @@ impl ClaudeCodeProvider {
             let stderr_handle = child
                 .stderr
                 .take()
-                .map(|se| {
+                .and_then(|se| {
                     std::thread::Builder::new()
                         .name("claude-stderr-interactive".into())
                         .spawn(move || {
@@ -955,8 +954,7 @@ impl ClaudeCodeProvider {
                             buf
                         })
                         .ok()
-                })
-                .flatten();
+                });
 
             // Emit a system event so the UI shows something while waiting for API response.
             sink.on_event(StreamOutputEvent::System {
@@ -1376,6 +1374,7 @@ fn worktree_has_recent_mtime(dir: &Path, since: std::time::SystemTime, depth: u3
 ///
 /// Stops reading and kills `child` if the total bytes collected exceed
 /// `max_bytes`. Returns the aggregated `StreamResult`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn collect_stream_live(
     reader: impl BufRead + Send + 'static,
     max_bytes: usize,

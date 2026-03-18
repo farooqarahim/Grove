@@ -49,7 +49,7 @@ You give Grove an objective — *"add pagination to the API"* or *"fix the open 
 ### From source
 
 ```bash
-git clone https://github.com/farooqarahim/grove.git
+git clone https://github.com/farooqarahim/Grove.git
 cd grove
 
 # Verify toolchain and dependencies

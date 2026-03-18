@@ -42,7 +42,15 @@ impl TestDb {
         let db_path = crate::config::paths::db_path(dir.path());
         Self { _dir: dir, db_path }
     }
+}
 
+impl Default for TestDb {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TestDb {
     /// Open a fresh connection to the test database.
     ///
     /// Uses `connection::open`, which applies all required PRAGMAs (WAL mode,
