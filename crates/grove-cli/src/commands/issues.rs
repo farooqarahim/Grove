@@ -16,6 +16,13 @@ fn truncate(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
+fn bool_field(v: &serde_json::Value, key: &str) -> &'static str {
+    v.get(key)
+        .and_then(|f| f.as_bool())
+        .map(|b| if b { "yes" } else { "no" })
+        .unwrap_or("")
+}
+
 fn priority_dot(v: &serde_json::Value) -> &'static str {
     let p = v.get("priority").and_then(|f| f.as_str()).unwrap_or("");
     match p {
@@ -615,7 +622,7 @@ pub fn connect_status_cmd(transport: &GroveTransport, mode: &OutputMode) -> CliR
                 .map(|v| {
                     vec![
                         truncate(field(v, "provider"), 16),
-                        truncate(field(v, "connected"), 12),
+                        bool_field(v, "connected").to_owned(),
                         truncate(field(v, "user"), 24),
                         truncate(field(v, "error"), 32),
                     ]
@@ -742,6 +749,17 @@ pub fn dispatch(a: IssueArgs, t: GroveTransport, m: OutputMode) -> CliResult<()>
 
 pub fn fix_cmd(a: FixArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
     use crate::transport::StartRunRequest;
+
+    if a.ready {
+        return Err(CliError::BadArg(
+            "--ready is not yet supported in this release".into(),
+        ));
+    }
+    if a.parallel {
+        return Err(CliError::BadArg(
+            "--parallel is not yet supported in this release".into(),
+        ));
+    }
 
     let issue_id = a.issue_id.clone();
     let objective = if let Some(prompt) = a.prompt.as_deref() {

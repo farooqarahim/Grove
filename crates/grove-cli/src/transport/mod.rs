@@ -124,6 +124,8 @@ pub trait Transport {
     fn reopen_issue(&self, id: &str) -> CliResult<()>;
     fn activity_issue(&self, id: &str) -> CliResult<Vec<serde_json::Value>>;
     fn push_issue(&self, id: &str, provider: &str) -> CliResult<serde_json::Value>;
+    /// Mark an issue as ready for review.
+    /// Pass `"current"` as `id` to resolve the current branch's linked issue server-side.
     fn issue_ready(&self, id: &str) -> CliResult<serde_json::Value>;
     fn connect_status(&self) -> CliResult<Vec<serde_json::Value>>;
     fn connect_provider(
