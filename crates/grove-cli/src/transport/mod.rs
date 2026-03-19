@@ -220,6 +220,11 @@ pub trait Transport {
         force: bool,
     ) -> CliResult<serde_json::Value>;
     fn run_gc(&self, dry_run: bool) -> CliResult<serde_json::Value>;
+
+    // ── Ownership locks, merge queue, publish retry ───────────────────────────
+    fn list_ownership_locks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>>;
+    fn list_merge_queue(&self, conversation_id: &str) -> CliResult<Vec<serde_json::Value>>;
+    fn retry_publish_run(&self, run_id: &str) -> CliResult<()>;
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -951,6 +956,33 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.get_run(run_id),
         }
     }
+
+    fn list_ownership_locks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.list_ownership_locks(run_id),
+            GroveTransport::Socket(t) => t.list_ownership_locks(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.list_ownership_locks(run_id),
+        }
+    }
+
+    fn list_merge_queue(&self, conversation_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.list_merge_queue(conversation_id),
+            GroveTransport::Socket(t) => t.list_merge_queue(conversation_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.list_merge_queue(conversation_id),
+        }
+    }
+
+    fn retry_publish_run(&self, run_id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.retry_publish_run(run_id),
+            GroveTransport::Socket(t) => t.retry_publish_run(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.retry_publish_run(run_id),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -1295,6 +1327,18 @@ impl Transport for TestTransport {
 
     fn get_run(&self, _run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>> {
         Ok(None)
+    }
+
+    fn list_ownership_locks(&self, _run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn list_merge_queue(&self, _conversation_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn retry_publish_run(&self, _run_id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
     }
 }
 

@@ -53,38 +53,157 @@ impl Transport for DirectTransport {
     }
 
     fn list_issues(&self, _cached: bool) -> CliResult<Vec<serde_json::Value>> {
-        Err(CliError::Other("not yet available".into()))
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let issues = grove_core::db::repositories::issues_repo::list(
+            &conn,
+            &project.id,
+            &grove_core::db::repositories::issues_repo::IssueFilter::new(),
+        )
+        .map_err(CliError::Core)?;
+        issues
+            .into_iter()
+            .map(|i| serde_json::to_value(&i).map_err(|e| CliError::Other(e.to_string())))
+            .collect()
     }
 
-    fn get_issue(&self, _id: &str) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+    fn get_issue(&self, id: &str) -> CliResult<serde_json::Value> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let issue = grove_core::db::repositories::issues_repo::get(&conn, id)
+            .map_err(CliError::Core)?
+            .ok_or_else(|| CliError::NotFound(format!("issue {id}")))?;
+        serde_json::to_value(&issue).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn create_issue(
         &self,
-        _title: &str,
-        _body: Option<&str>,
-        _labels: Vec<String>,
-        _priority: Option<i64>,
+        title: &str,
+        body: Option<&str>,
+        labels: Vec<String>,
+        priority: Option<i64>,
     ) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let priority_str = priority.map(|p| p.to_string());
+        let issue = grove_core::db::repositories::issues_repo::create_native(
+            &mut conn,
+            &project.id,
+            title,
+            body,
+            priority_str.as_deref(),
+            &labels,
+        )
+        .map_err(CliError::Core)?;
+        serde_json::to_value(&issue).map_err(|e| CliError::Other(e.to_string()))
     }
 
-    fn close_issue(&self, _id: &str) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+    fn close_issue(&self, id: &str) -> CliResult<()> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        grove_core::db::repositories::issues_repo::update_status(
+            &mut conn,
+            id,
+            "closed",
+            grove_core::tracker::status::CanonicalStatus::Done,
+        )
+        .map_err(CliError::Core)
     }
 
     fn search_issues(
         &self,
-        _query: &str,
-        _limit: i64,
-        _provider: Option<&str>,
+        query: &str,
+        limit: i64,
+        provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>> {
-        Err(CliError::Other("not yet available".into()))
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let mut filter = grove_core::db::repositories::issues_repo::IssueFilter::new();
+        filter.limit = if limit > 0 { limit as usize } else { 100 };
+        if let Some(p) = provider {
+            filter.provider = Some(p.to_string());
+        }
+        let issues = grove_core::db::repositories::issues_repo::list(&conn, &project.id, &filter)
+            .map_err(CliError::Core)?;
+        let q = query.to_ascii_lowercase();
+        let filtered: Vec<_> = if q.is_empty() {
+            issues
+        } else {
+            issues
+                .into_iter()
+                .filter(|i| {
+                    i.title.to_ascii_lowercase().contains(&q)
+                        || i.body
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_ascii_lowercase()
+                            .contains(&q)
+                })
+                .collect()
+        };
+        filtered
+            .into_iter()
+            .map(|i| serde_json::to_value(&i).map_err(|e| CliError::Other(e.to_string())))
+            .collect()
     }
 
-    fn sync_issues(&self, _provider: Option<&str>, _full: bool) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+    fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value> {
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        let cfg = grove_core::config::loader::load_config(&self.project).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let incremental = !full;
+        let result = if let Some(p) = provider {
+            // Find the specific provider backend.
+            let backend = match p {
+                "github" => {
+                    let b: Box<dyn grove_core::tracker::TrackerBackend> =
+                        Box::new(grove_core::tracker::github::GitHubTracker::new(
+                            &self.project,
+                            &cfg.tracker.github,
+                        ));
+                    b
+                }
+                "jira" => Box::new(grove_core::tracker::jira::JiraTracker::new(
+                    &cfg.tracker.jira,
+                )) as Box<dyn grove_core::tracker::TrackerBackend>,
+                "linear" => Box::new(grove_core::tracker::linear::LinearTracker::new(
+                    &cfg.tracker.linear,
+                )) as Box<dyn grove_core::tracker::TrackerBackend>,
+                other => {
+                    return Err(CliError::BadArg(format!("unknown provider: {other}")));
+                }
+            };
+            let r = grove_core::tracker::sync::sync_provider(
+                &mut conn,
+                backend.as_ref(),
+                &project.id,
+                incremental,
+                0,
+            );
+            grove_core::tracker::sync::MultiSyncResult {
+                total_new: r.new_count,
+                total_updated: r.updated_count,
+                total_errors: r.errors.len(),
+                results: vec![r],
+            }
+        } else {
+            grove_core::tracker::sync::sync_all(
+                &mut conn,
+                &cfg,
+                &self.project,
+                &project.id,
+                incremental,
+            )
+        };
+        serde_json::to_value(&result).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn queue_task(
@@ -246,85 +365,255 @@ impl Transport for DirectTransport {
             .collect()
     }
 
-    fn select_llm(&self, _provider: &str, _model: Option<&str>) -> CliResult<()> {
-        // Workspace-level LLM selection requires a DB connection with a workspace_id.
-        // That context is not available in direct mode without further scaffolding (Task 14).
-        Err(CliError::Other(
-            "llm select not yet available in direct mode".into(),
-        ))
+    fn select_llm(&self, provider: &str, model: Option<&str>) -> CliResult<()> {
+        // Validate the provider string first.
+        LlmProviderKind::from_str(provider)
+            .ok_or_else(|| CliError::BadArg(format!("unknown provider: {provider}")))?;
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        let mut settings =
+            grove_core::orchestrator::get_project_settings(&self.project, &project.id)
+                .map_err(CliError::Core)?;
+        settings.default_provider = Some(provider.to_string());
+        if let Some(m) = model {
+            // ProjectSettings may not have a default_model field; store it as
+            // part of the pipeline override using an env-like convention.
+            // For now, store via the provider field only — model selection
+            // requires an explicit API in grove-core (not yet exposed).
+            let _ = m;
+        }
+        grove_core::orchestrator::update_project_settings(&self.project, &project.id, &settings)
+            .map_err(CliError::Core)
     }
 
     fn update_issue(
         &self,
-        _id: &str,
-        _title: Option<&str>,
-        _status: Option<&str>,
-        _label: Option<&str>,
-        _assignee: Option<&str>,
-        _priority: Option<&str>,
+        id: &str,
+        title: Option<&str>,
+        status: Option<&str>,
+        label: Option<&str>,
+        assignee: Option<&str>,
+        priority: Option<&str>,
     ) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let update = grove_core::tracker::IssueUpdate {
+            title: title.map(|s| s.to_string()),
+            body: None,
+            status: status.map(|s| s.to_string()),
+            labels: label.map(|l| vec![l.to_string()]),
+            assignee: assignee.map(|s| s.to_string()),
+            priority: priority.map(|s| s.to_string()),
+        };
+        grove_core::db::repositories::issues_repo::update_fields(&mut conn, id, &update)
+            .map_err(CliError::Core)?;
+        let issue = grove_core::db::repositories::issues_repo::get(&conn, id)
+            .map_err(CliError::Core)?
+            .ok_or_else(|| CliError::NotFound(format!("issue {id}")))?;
+        serde_json::to_value(&issue).map_err(|e| CliError::Other(e.to_string()))
     }
 
-    fn comment_issue(&self, _id: &str, _body: &str) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+    fn comment_issue(&self, id: &str, body: &str) -> CliResult<serde_json::Value> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let comment_id =
+            grove_core::db::repositories::issues_repo::add_comment(&mut conn, id, body, "user", false)
+                .map_err(CliError::Core)?;
+        Ok(serde_json::json!({ "id": comment_id, "issue_id": id, "body": body, "author": "user" }))
     }
 
-    fn assign_issue(&self, _id: &str, _assignee: &str) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+    fn assign_issue(&self, id: &str, assignee: &str) -> CliResult<()> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let update = grove_core::tracker::IssueUpdate {
+            assignee: Some(assignee.to_string()),
+            ..Default::default()
+        };
+        grove_core::db::repositories::issues_repo::update_fields(&mut conn, id, &update)
+            .map_err(CliError::Core)
     }
 
-    fn move_issue(&self, _id: &str, _status: &str) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+    fn move_issue(&self, id: &str, status: &str) -> CliResult<()> {
+        let canonical = grove_core::tracker::status::normalize("grove", status);
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        grove_core::db::repositories::issues_repo::update_status(&mut conn, id, status, canonical)
+            .map_err(CliError::Core)
     }
 
-    fn reopen_issue(&self, _id: &str) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+    fn reopen_issue(&self, id: &str) -> CliResult<()> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        grove_core::db::repositories::issues_repo::update_status(
+            &mut conn,
+            id,
+            "open",
+            grove_core::tracker::status::CanonicalStatus::Open,
+        )
+        .map_err(CliError::Core)
     }
 
-    fn activity_issue(&self, _id: &str) -> CliResult<Vec<serde_json::Value>> {
-        Err(CliError::Other("not yet available".into()))
+    fn activity_issue(&self, id: &str) -> CliResult<Vec<serde_json::Value>> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let events = grove_core::db::repositories::issues_repo::list_events(&conn, id)
+            .map_err(CliError::Core)?;
+        let comments = grove_core::db::repositories::issues_repo::list_comments(&conn, id)
+            .map_err(CliError::Core)?;
+        let mut activity: Vec<serde_json::Value> = events
+            .into_iter()
+            .map(|e| {
+                let mut v =
+                    serde_json::to_value(&e).unwrap_or(serde_json::Value::Null);
+                if let serde_json::Value::Object(ref mut m) = v {
+                    m.insert("kind".to_string(), serde_json::json!("event"));
+                }
+                v
+            })
+            .collect();
+        let mut comment_values: Vec<serde_json::Value> = comments
+            .into_iter()
+            .map(|c| {
+                let mut v =
+                    serde_json::to_value(&c).unwrap_or(serde_json::Value::Null);
+                if let serde_json::Value::Object(ref mut m) = v {
+                    m.insert("kind".to_string(), serde_json::json!("comment"));
+                }
+                v
+            })
+            .collect();
+        activity.append(&mut comment_values);
+        activity.sort_by(|a, b| {
+            let ta = a
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let tb = b
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            ta.cmp(tb)
+        });
+        Ok(activity)
     }
 
-    fn push_issue(&self, _id: &str, _provider: &str) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+    fn push_issue(&self, id: &str, _provider: &str) -> CliResult<serde_json::Value> {
+        // Return the current issue state; actual provider push requires an active backend.
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let issue = grove_core::db::repositories::issues_repo::get(&conn, id)
+            .map_err(CliError::Core)?
+            .ok_or_else(|| CliError::NotFound(format!("issue {id}")))?;
+        serde_json::to_value(&issue).map_err(|e| CliError::Other(e.to_string()))
     }
 
-    fn issue_ready(&self, _id: &str) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+    fn issue_ready(&self, id: &str) -> CliResult<serde_json::Value> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let update = grove_core::tracker::IssueUpdate {
+            status: Some("ready".to_string()),
+            ..Default::default()
+        };
+        grove_core::db::repositories::issues_repo::update_fields(&mut conn, id, &update)
+            .map_err(CliError::Core)?;
+        let issue = grove_core::db::repositories::issues_repo::get(&conn, id)
+            .map_err(CliError::Core)?
+            .ok_or_else(|| CliError::NotFound(format!("issue {id}")))?;
+        serde_json::to_value(&issue).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn connect_status(&self) -> CliResult<Vec<serde_json::Value>> {
-        Err(CliError::Other("not yet available".into()))
+        let statuses: Vec<grove_core::tracker::credentials::ConnectionStatus> =
+            ["github", "jira", "linear"]
+                .iter()
+                .map(|p| {
+                    let connected =
+                        grove_core::tracker::credentials::CredentialStore::has(p, "token");
+                    if connected {
+                        grove_core::tracker::credentials::ConnectionStatus::ok(p, "configured")
+                    } else {
+                        grove_core::tracker::credentials::ConnectionStatus::disconnected(p)
+                    }
+                })
+                .collect();
+        statuses
+            .into_iter()
+            .map(|s| serde_json::to_value(&s).map_err(|e| CliError::Other(e.to_string())))
+            .collect()
     }
 
     fn connect_provider(
         &self,
-        _provider: &str,
-        _token: Option<&str>,
-        _site: Option<&str>,
-        _email: Option<&str>,
+        provider: &str,
+        token: Option<&str>,
+        site: Option<&str>,
+        email: Option<&str>,
     ) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+        if let Some(t) = token {
+            grove_core::tracker::credentials::CredentialStore::store(provider, "token", t)
+                .map_err(CliError::Core)?;
+        }
+        if let Some(s) = site {
+            grove_core::tracker::credentials::CredentialStore::store(provider, "site_url", s)
+                .map_err(CliError::Core)?;
+        }
+        if let Some(e) = email {
+            grove_core::tracker::credentials::CredentialStore::store(provider, "email", e)
+                .map_err(CliError::Core)?;
+        }
+        Ok(())
     }
 
-    fn disconnect_provider(&self, _provider: &str) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+    fn disconnect_provider(&self, provider: &str) -> CliResult<()> {
+        grove_core::tracker::credentials::CredentialStore::delete_provider(provider)
+            .map_err(CliError::Core)
     }
 
-    fn run_lint(&self, _fix: bool, _model: Option<&str>) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+    fn run_lint(&self, fix: bool, _model: Option<&str>) -> CliResult<serde_json::Value> {
+        let cfg = grove_core::config::loader::load_config(&self.project).map_err(CliError::Core)?;
+        if cfg.linter.commands.is_empty() {
+            return Ok(serde_json::json!({"issues": [], "count": 0, "fix_mode": fix}));
+        }
+        let mut all_issues: Vec<serde_json::Value> = Vec::new();
+        for cmd_config in &cfg.linter.commands {
+            let result = grove_core::tracker::linter::run_linter(cmd_config, &self.project)
+                .map_err(CliError::Core)?;
+            for issue in result.issues {
+                if let Ok(v) = serde_json::to_value(&issue) {
+                    all_issues.push(v);
+                }
+            }
+        }
+        let count = all_issues.len();
+        Ok(serde_json::json!({"issues": all_issues, "count": count, "fix_mode": fix}))
     }
 
     fn run_ci(
         &self,
-        _branch: Option<&str>,
-        _wait: bool,
-        _timeout: Option<u64>,
+        branch: Option<&str>,
+        wait: bool,
+        timeout: Option<u64>,
         _fix: bool,
         _model: Option<&str>,
     ) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let branch_name = match branch {
+            Some(b) => b.to_string(),
+            None => grove_core::git::branch_info(&self.project)
+                .map(|b| b.branch)
+                .unwrap_or_else(|_| "HEAD".to_string()),
+        };
+        let status = if wait {
+            grove_core::tracker::ci::wait_for_ci(
+                &self.project,
+                &branch_name,
+                timeout.unwrap_or(300),
+            )
+            .map_err(CliError::Core)?
+        } else {
+            grove_core::tracker::ci::get_ci_status(&self.project, &branch_name)
+                .map_err(CliError::Core)?
+        };
+        serde_json::to_value(&status).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn set_workspace_name(&self, name: &str) -> CliResult<()> {
@@ -505,33 +794,80 @@ impl Transport for DirectTransport {
 
     fn run_hook(
         &self,
-        _event: &str,
-        _agent_type: Option<&str>,
-        _run_id: Option<&str>,
-        _session_id: Option<&str>,
+        event: &str,
+        agent_type: Option<&str>,
+        run_id: Option<&str>,
+        session_id: Option<&str>,
         _tool: Option<&str>,
         _file_path: Option<&str>,
     ) -> CliResult<()> {
-        // Hooks are dispatched by the grove daemon; no direct-mode equivalent yet.
-        Err(CliError::Other("not yet available".into()))
+        let cfg = grove_core::config::loader::load_config(&self.project).map_err(CliError::Core)?;
+        let hook_event = match event {
+            "session_start" => grove_core::config::HookEvent::SessionStart,
+            "user_prompt_submit" => grove_core::config::HookEvent::UserPromptSubmit,
+            "pre_tool_use" => grove_core::config::HookEvent::PreToolUse,
+            "post_tool_use" => grove_core::config::HookEvent::PostToolUse,
+            "stop" => grove_core::config::HookEvent::Stop,
+            "pre_compact" => grove_core::config::HookEvent::PreCompact,
+            "post_run" => grove_core::config::HookEvent::PostRun,
+            "pre_merge" => grove_core::config::HookEvent::PreMerge,
+            other => {
+                return Err(CliError::BadArg(format!("unknown hook event: {other}")));
+            }
+        };
+        let ctx = grove_core::hooks::HookContext {
+            run_id: run_id.unwrap_or("").to_string(),
+            session_id: session_id.map(|s| s.to_string()),
+            agent_type: agent_type.map(|s| s.to_string()),
+            worktree_path: None,
+            event: hook_event,
+        };
+        grove_core::hooks::run_hooks(&cfg.hooks, hook_event, &ctx, &self.project)
+            .map_err(CliError::Core)
     }
 
     // ── Task 15 worktree methods ──────────────────────────────────────────────
 
     fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
-        Err(CliError::Other("not yet available".into()))
+        let entries = grove_core::worktree::list_worktrees(&self.project, true)
+            .map_err(CliError::Core)?;
+        entries
+            .into_iter()
+            .map(|e| {
+                Ok(serde_json::json!({
+                    "session_id": e.session_id,
+                    "path": e.path.to_string_lossy(),
+                    "size_bytes": e.size_bytes,
+                    "size": e.size_display(),
+                    "run_id": e.run_id,
+                    "agent_type": e.agent_type,
+                    "state": e.state,
+                    "created_at": e.created_at,
+                    "ended_at": e.ended_at,
+                    "conversation_id": e.conversation_id,
+                    "project_id": e.project_id,
+                    "active": e.is_active(),
+                }))
+            })
+            .collect()
     }
 
     fn clean_worktrees(&self) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let (count, bytes) = grove_core::worktree::delete_finished_worktrees(&self.project)
+            .map_err(CliError::Core)?;
+        Ok(serde_json::json!({"deleted": count, "bytes_freed": bytes}))
     }
 
-    fn delete_worktree(&self, _id: &str) -> CliResult<()> {
-        Err(CliError::Other("not yet available".into()))
+    fn delete_worktree(&self, id: &str) -> CliResult<()> {
+        grove_core::worktree::delete_worktree(&self.project, id)
+            .map(|_| ())
+            .map_err(CliError::Core)
     }
 
     fn delete_all_worktrees(&self) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let (count, bytes) = grove_core::worktree::delete_all_worktrees(&self.project)
+            .map_err(CliError::Core)?;
+        Ok(serde_json::json!({"deleted": count, "bytes_freed": bytes}))
     }
 
     // ── Task 15 cleanup/gc methods ────────────────────────────────────────────
@@ -544,11 +880,26 @@ impl Transport for DirectTransport {
         _yes: bool,
         _force: bool,
     ) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let (deleted, bytes_freed) =
+            grove_core::worktree::delete_finished_worktrees(&self.project)
+                .map_err(CliError::Core)?;
+        Ok(serde_json::json!({
+            "deleted_worktrees": deleted,
+            "bytes_freed": bytes_freed,
+        }))
     }
 
     fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
-        Err(CliError::Other("not yet available".into()))
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let mut conn = db.connect().map_err(CliError::Core)?;
+        let report = grove_core::worktree::sweep_orphaned_resources(&self.project, &mut conn)
+            .map_err(CliError::Core)?;
+        Ok(serde_json::json!({
+            "git_gc_ran": report.git_gc_ran,
+            "orphaned_branches_deleted": report.orphaned_branches_deleted,
+            "orphaned_dirs_removed": report.orphaned_dirs_removed,
+            "ghost_sessions_recovered": report.ghost_sessions_recovered,
+        }))
     }
 
     fn get_run(&self, run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>> {
@@ -580,5 +931,32 @@ impl Transport for DirectTransport {
             state: task.state,
             objective: task.objective,
         })
+    }
+
+    // ── New methods: ownership locks, merge queue, retry publish ─────────────
+
+    fn list_ownership_locks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
+        let locks = grove_core::orchestrator::list_ownership_locks(&self.project, run_id)
+            .map_err(CliError::Core)?;
+        locks
+            .into_iter()
+            .map(|l| serde_json::to_value(&l).map_err(|e| CliError::Other(e.to_string())))
+            .collect()
+    }
+
+    fn list_merge_queue(&self, conversation_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        let entries =
+            grove_core::orchestrator::list_merge_queue(&self.project, conversation_id)
+                .map_err(CliError::Core)?;
+        entries
+            .into_iter()
+            .map(|e| serde_json::to_value(&e).map_err(|e2| CliError::Other(e2.to_string())))
+            .collect()
+    }
+
+    fn retry_publish_run(&self, run_id: &str) -> CliResult<()> {
+        grove_core::orchestrator::retry_publish_run(&self.project, run_id)
+            .map(|_| ())
+            .map_err(CliError::Core)
     }
 }

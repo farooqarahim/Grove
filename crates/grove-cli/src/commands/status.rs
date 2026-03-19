@@ -312,22 +312,208 @@ pub fn abort_cmd(args: AbortArgs, transport: GroveTransport, mode: OutputMode) -
     Ok(())
 }
 
-// ── not-yet-implemented stubs ─────────────────────────────────────────────────
+// ── ownership ─────────────────────────────────────────────────────────────────
 
-pub fn ownership_cmd(_a: OwnershipArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+pub fn ownership_cmd(a: OwnershipArgs, t: GroveTransport, mode: OutputMode) -> CliResult<()> {
+    let locks = t.list_ownership_locks(a.run_id.as_deref())?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::Value::Array(locks);
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            if locks.is_empty() {
+                println!("{}", text::dim("no ownership locks held"));
+                return Ok(());
+            }
+            let rows: Vec<Vec<String>> = locks
+                .iter()
+                .map(|l| {
+                    vec![
+                        l.get("id")
+                            .and_then(|v| v.as_i64())
+                            .map(|id| id.to_string())
+                            .unwrap_or_default(),
+                        l.get("run_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(8).collect::<String>())
+                            .unwrap_or_default(),
+                        l.get("owner_session_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(8).collect::<String>())
+                            .unwrap_or_default(),
+                        l.get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        l.get("created_at")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(19).collect::<String>())
+                            .unwrap_or_default(),
+                    ]
+                })
+                .collect();
+            println!(
+                "{}",
+                text::render_table(&["ID", "RUN", "SESSION", "PATH", "ACQUIRED"], &rows)
+            );
+        }
+    }
+    Ok(())
 }
 
-pub fn conflicts_cmd(_a: ConflictsArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── conflicts ─────────────────────────────────────────────────────────────────
+
+pub fn conflicts_cmd(a: ConflictsArgs, t: GroveTransport, mode: OutputMode) -> CliResult<()> {
+    if a.resolve.is_some() {
+        return Err(CliError::Other(
+            "conflict resolution requires interactive UI — not yet available in CLI mode".into(),
+        ));
+    }
+
+    let worktrees = t.list_worktrees()?;
+
+    // Filter to only active worktrees, or to the specific run if --show is set.
+    let relevant: Vec<_> = worktrees
+        .iter()
+        .filter(|w| {
+            let is_active = w
+                .get("active")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if let Some(ref run_id) = a.show {
+                w.get("run_id")
+                    .and_then(|v| v.as_str())
+                    .map(|r| r.starts_with(run_id.as_str()))
+                    .unwrap_or(false)
+            } else {
+                is_active
+            }
+        })
+        .collect();
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::Value::Array(relevant.into_iter().cloned().collect());
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            if relevant.is_empty() {
+                println!("{}", text::dim("no active worktrees with conflicts"));
+                return Ok(());
+            }
+            let rows: Vec<Vec<String>> = relevant
+                .iter()
+                .map(|w| {
+                    vec![
+                        w.get("run_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(8).collect::<String>())
+                            .unwrap_or_default(),
+                        w.get("session_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(8).collect::<String>())
+                            .unwrap_or_default(),
+                        w.get("state")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        w.get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ]
+                })
+                .collect();
+            println!(
+                "{}",
+                text::render_table(&["RUN", "SESSION", "STATE", "PATH"], &rows)
+            );
+        }
+    }
+    Ok(())
 }
 
-pub fn merge_status_cmd(_a: MergeStatusArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── merge-status ──────────────────────────────────────────────────────────────
+
+pub fn merge_status_cmd(a: MergeStatusArgs, t: GroveTransport, mode: OutputMode) -> CliResult<()> {
+    let entries = t.list_merge_queue(&a.conversation_id)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::Value::Array(entries);
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            if entries.is_empty() {
+                println!("{}", text::dim("no merge queue entries"));
+                return Ok(());
+            }
+            let rows: Vec<Vec<String>> = entries
+                .iter()
+                .map(|e| {
+                    vec![
+                        e.get("id")
+                            .and_then(|v| v.as_i64())
+                            .map(|id| id.to_string())
+                            .unwrap_or_default(),
+                        e.get("branch_name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        e.get("target_branch")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        e.get("status")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        e.get("pr_url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        e.get("created_at")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(19).collect::<String>())
+                            .unwrap_or_default(),
+                    ]
+                })
+                .collect();
+            println!(
+                "{}",
+                text::render_table(
+                    &["ID", "BRANCH", "TARGET", "STATUS", "PR_URL", "CREATED"],
+                    &rows
+                )
+            );
+        }
+    }
+    Ok(())
 }
 
-pub fn publish_cmd(_a: PublishArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── publish ───────────────────────────────────────────────────────────────────
+
+pub fn publish_cmd(a: PublishArgs, t: GroveTransport, mode: OutputMode) -> CliResult<()> {
+    use crate::cli::PublishAction;
+    match a.action {
+        PublishAction::Retry { run_id } => {
+            t.retry_publish_run(&run_id)?;
+            match mode {
+                OutputMode::Json => {
+                    println!("{}", serde_json::json!({"ok": true, "run_id": run_id}));
+                }
+                OutputMode::Text { .. } => {
+                    println!(
+                        "retried publish for {}",
+                        run_id.chars().take(8).collect::<String>()
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -481,13 +667,13 @@ mod tests {
     }
 
     #[test]
-    fn ownership_cmd_returns_not_yet_implemented() {
+    fn ownership_cmd_empty_ok() {
         let t = GroveTransport::Test(TestTransport::default());
         let result = ownership_cmd(
             crate::cli::OwnershipArgs { run_id: None },
             t,
             crate::output::OutputMode::Text { no_color: true },
         );
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 }
