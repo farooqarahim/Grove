@@ -1,46 +1,39 @@
 # Integrations
 
-Grove integrates with external LLM providers and issue trackers. This document covers how to configure and use each one.
+Grove integrates with external LLM providers, coding agent CLIs, and issue trackers. This document covers how to configure and use each one.
 
 ---
 
 ## LLM providers
 
-Grove uses the **Claude Code CLI** (`claude`) as its default agent provider. It also supports Gemini, Codex, Aider, and Cursor. You can mix providers within a project or switch the workspace default.
+Grove supports multiple LLM providers for direct API access. The default agent backend is Claude Code (which handles its own API calls), but you can also configure Grove to call LLM APIs directly.
 
 ### Anthropic (Claude) — default
 
 **Supported models:** claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001, and others.
 
 ```bash
-# Store your API key
 grove auth set anthropic sk-ant-api03-...
-
-# Select model at the workspace level
-grove llm select anthropic claude-sonnet-4-6 --own-key
-
-# Use Opus for planning agents, Sonnet for builders
+grove llm select anthropic claude-sonnet-4-6
 ```
 
-In `grove.yaml`, assign different models to different agent types:
+In `grove.yaml`, assign different models to different agent roles:
 
 ```yaml
-providers:
-  agent_models:
-    models:
-      build_prd: "claude-opus-4-6"
-      plan_system_design: "claude-opus-4-6"
-      builder: "claude-sonnet-4-6"
-      reviewer: "claude-sonnet-4-6"
-      judge: "claude-opus-4-6"
-      default: "claude-sonnet-4-6"
+agent_models:
+  architect: "claude-opus-4-6"
+  builder: "claude-sonnet-4-6"
+  tester: "claude-haiku-4-5-20251001"
+  reviewer: "claude-sonnet-4-6"
+  security: "claude-opus-4-6"
+  default: "claude-sonnet-4-6"
 ```
 
 ### OpenAI
 
 ```bash
 grove auth set openai sk-...
-grove llm select openai gpt-4o --own-key
+grove llm select openai
 grove llm models openai          # list available models
 ```
 
@@ -48,14 +41,14 @@ grove llm models openai          # list available models
 
 ```bash
 grove auth set deepseek sk-...
-grove llm select deepseek deepseek-coder --own-key
+grove llm select deepseek
 ```
 
 ### Inception
 
 ```bash
 grove auth set inception <token>
-grove llm select inception mercury --own-key
+grove llm select inception
 ```
 
 ### Checking provider status
@@ -65,13 +58,55 @@ grove llm list              # shows all providers with auth status and model cou
 grove auth list             # shows which providers have stored keys
 ```
 
-### Workspace credits
+---
 
-If you have Grove workspace credits, you can use Grove's pooled API key instead of your own. This lets you start immediately without managing API keys:
+## Coding agent backends
 
-```bash
-grove llm credits balance                                       # check your credit balance
-grove llm select anthropic claude-sonnet-4-6 --workspace-credits  # use credits
+Grove orchestrates work by spawning external coding agent CLIs. Each agent session runs one of these backends in an isolated worktree.
+
+### Supported backends
+
+| Backend | CLI command | Notes |
+|---|---|---|
+| **Claude Code** | `claude` | Default. Best integration. |
+| **Gemini** | `gemini` | Google's coding agent |
+| **Codex** | `codex` | OpenAI's coding agent |
+| **Aider** | `aider` | Open-source AI pair programmer |
+| **Cursor** | `cursor-agent` | Cursor's agent mode |
+| **Copilot** | `copilot` | GitHub Copilot CLI |
+| **Qwen Code** | `qwen` | Alibaba's coding agent |
+| **OpenCode** | `opencode` | Uses keystroke injection |
+| **Kimi** | `kimi` | Moonshot's coding agent |
+| **Amp** | `amp` | Sourcegraph's coding agent |
+| **Goose** | `goose` | Block's coding agent |
+| **Cline** | `cline` | VS Code extension CLI |
+| **Continue** | `cn` | Continue.dev CLI |
+| **Kiro** | `kiro-cli` | Amazon's coding agent |
+| **Auggie** | `auggie` | AI coding assistant |
+| **Kilocode** | `kilocode` | AI coding assistant |
+
+### Switching the default backend
+
+```yaml
+# grove.yaml
+providers:
+  default: "gemini"    # route all agent sessions through Gemini
+```
+
+### Per-backend configuration
+
+Each backend can be customized in `grove.yaml`:
+
+```yaml
+providers:
+  coding_agents:
+    aider:
+      enabled: true
+      command: "aider"
+      timeout_seconds: 300
+      auto_approve_flag: "--yes"
+      initial_prompt_flag: "--message"
+      model_flag: "--model"
 ```
 
 ---
@@ -91,7 +126,6 @@ GitHub integration uses the `gh` CLI for authentication. Install and authenticat
 ```bash
 # Install gh (https://cli.github.com/)
 brew install gh              # macOS
-# or: https://github.com/cli/cli#installation
 
 # Authenticate
 gh auth login
@@ -112,7 +146,7 @@ grove connect github --token ghp_...
 Set the project key (owner/repo) so Grove knows which repository to use:
 
 ```bash
-grove project set --provider github --project-key "myorg/myrepo"
+grove project set --provider github
 ```
 
 **What you can do with GitHub integration:**
@@ -120,7 +154,7 @@ grove project set --provider github --project-key "myorg/myrepo"
 ```bash
 grove issue list                    # list open issues
 grove issue show 42                 # show issue details
-grove issue create "Bug title" --body "Description" --labels "bug,priority:high"
+grove issue create "Bug title" --body "Description" --labels bug --labels priority:high
 grove issue sync                    # sync issues from GitHub into the local board
 grove issue board                   # text-mode kanban view
 grove issue search "authentication" # search issues by text
@@ -154,7 +188,7 @@ Generate a Jira API token at: https://id.atlassian.com/manage-profile/security/a
 Set the project key:
 
 ```bash
-grove project set --provider jira --project-key "PROJ"
+grove project set --provider jira
 ```
 
 **What you can do:**
@@ -166,7 +200,6 @@ grove issue sync                    # sync from Jira
 grove issue board --status open     # view by status
 grove issue move PROJ-123 "In Progress"  # update issue status
 grove fix PROJ-123                  # fetch and fix an issue
-grove fix --ready                   # fix all issues in "Ready" state
 ```
 
 ### Linear
@@ -177,12 +210,6 @@ grove connect linear --token lin_api_...
 
 Generate a Linear API token at: https://linear.app/settings/api
 
-Set the team key:
-
-```bash
-grove project set --provider linear --project-key "ENG"
-```
-
 **What you can do:**
 
 ```bash
@@ -191,7 +218,6 @@ grove issue show ENG-42             # show issue details
 grove issue sync                    # sync from Linear
 grove issue board                   # kanban view
 grove fix ENG-42                    # fix a specific issue
-grove fix --ready --parallel        # fix all "ready" issues in parallel
 ```
 
 ### Checking connection status
@@ -245,12 +271,6 @@ Grove ships a **Model Context Protocol (MCP) server** that exposes Grove's orche
 
 ```bash
 grove-mcp-server --db .grove/grove.db
-```
-
-Or via the dev script:
-
-```bash
-./scripts/dev.sh --build   # builds grove-mcp-server alongside the GUI
 ```
 
 ### Available MCP tools
@@ -314,7 +334,7 @@ When `orchestration.enable_run_mcp` is `true` (the default), Grove automatically
 
 ## CI integration
 
-Grove can watch your CI status and automatically fix failures.
+Grove can check your CI status and automatically fix failures.
 
 ```bash
 # Check CI status for the current branch
@@ -324,10 +344,26 @@ grove ci
 grove ci --wait
 
 # If CI is failing, spawn an agent run to fix it
-grove ci --fix --budget-usd 10
+grove ci --fix
 
 # Combine: wait for CI, then auto-fix if it fails
-grove ci --wait --fix
+grove ci --wait --fix --model claude-sonnet-4-6
 ```
 
-This integrates with GitHub Actions via the `gh` CLI. The `grove ci` command reads the workflow status for the current branch and, if `--fix` is specified, spawns a run with the `ci-fix` pipeline targeting the specific failures.
+This integrates with GitHub Actions via the `gh` CLI. The `grove ci` command reads the workflow status for the current branch and, if `--fix` is specified, spawns a run targeting the specific failures.
+
+---
+
+## Linting
+
+Grove can run configured linters and optionally spawn an agent to fix issues:
+
+```bash
+# Run linters and report results
+grove lint
+
+# Run linters, then spawn an agent to fix issues
+grove lint --fix --model claude-sonnet-4-6
+```
+
+Configure linters in `grove.yaml` under the `tracker` section.

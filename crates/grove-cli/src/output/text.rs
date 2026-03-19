@@ -2,8 +2,8 @@
 
 use console::Style;
 use indicatif::{ProgressBar, ProgressStyle};
-use tabled::builder::Builder;
 use std::time::Duration;
+use tabled::builder::Builder;
 
 pub fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
     let mut b = Builder::default();

@@ -130,7 +130,24 @@
       "Bash(cargo fmt:*)",
       "Bash(/Users/farooqrahim/work/Grove-Dev/grove-old/target/debug/grove --project /tmp/test_grove_$$init --format json init)",
       "Bash(/Users/farooqrahim/work/Grove-Dev/grove-old/target/debug/grove --project /tmp/test_grove_$$init --format json logs run_does_not_exist)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(/Users/farooqrahim/.cargo/bin/cargo update:*)",
+      "Bash(/Users/farooqrahim/.cargo/bin/cargo search:*)",
+      "Bash(/Users/farooqrahim/.cargo/bin/rustc --version 2>&1)",
+      "Bash(/Users/farooqrahim/.cargo/bin/cargo clippy:*)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo clippy -p grove-cli -- -D warnings)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo test -p grove-cli)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo check -p grove-cli 2>&1)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo check -p grove-cli --features tui 2>&1)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo build -p grove-cli)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo check -p grove-cli)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" cargo check -p grove-cli --features tui)",
+      "Bash(/Users/farooqrahim/work/Grove-Dev/Grove/target/debug/grove tasks:*)",
+      "Bash(./target/debug/grove status:*)",
+      "Bash(./target/debug/grove auth:*)",
+      "Bash(./target/debug/grove git:*)",
+      "Bash(./target/debug/grove doctor:*)",
+      "Bash(cargo run:*)"
     ]
   }
 }

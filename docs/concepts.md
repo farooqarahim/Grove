@@ -9,7 +9,6 @@ This document explains the key concepts in Grove. Understanding these will help 
 A **workspace** is the top-level Grove identity for your machine. It is created automatically on first use and holds:
 
 - Global LLM provider selection and credentials
-- Credit balance (if using Grove-hosted API keys)
 - References to all registered projects
 
 You typically have one workspace per machine. Manage it with `grove workspace show` and `grove workspace set-name`.
@@ -23,10 +22,23 @@ A **project** is a local directory registered with Grove. Most commonly it is a 
 Each project stores:
 - A display name
 - The path on disk
-- Default settings (pipeline, budget, provider, permission mode)
+- Default settings (pipeline, provider, permission mode, parallel agent limit)
 - Connections to external issue trackers
 
 Initialize a project in a directory with `grove init`, or register an existing directory with `grove project open-folder <path>`.
+
+### Project sources
+
+Grove supports several ways to create projects:
+
+```bash
+grove project open-folder <path>              # register an existing local directory
+grove project clone <repo-url> <path>         # clone a git repository
+grove project create-repo <repo> <path>       # create a new repository
+grove project fork-repo <src> <target> <repo> # fork a repo to a remote
+grove project fork-folder <src> <target>      # copy a local folder
+grove project ssh <host> <remote-path>        # connect to a remote machine via SSH
+```
 
 ---
 
@@ -67,7 +79,7 @@ Runs transition through states automatically. If a run fails, it can be resumed 
 
 ## Session
 
-A **session** is one agent instance within a run. A run can have multiple sessions — for example, a `standard` pipeline run has sessions for the PRD agent, the system design agent, one or more builder agents, the reviewer, and the judge.
+A **session** is one agent instance within a run. A run can have multiple sessions — for example, a standard pipeline run has sessions for the architect, one or more builders, the reviewer, and the tester.
 
 Each session:
 - Runs in its own isolated git **worktree**
@@ -83,12 +95,13 @@ A **worktree** is an isolated checkout of your repository, created by `git workt
 
 Worktrees are created under `.grove/worktrees/` by default. When a session completes, its worktree can be merged into the conversation branch and then cleaned up.
 
-Manage worktrees manually with:
+Manage worktrees with:
 
 ```bash
 grove worktrees              # list all worktrees
 grove worktrees --clean      # delete all finished worktrees
 grove worktrees --delete <session-id>   # delete a specific worktree
+grove worktrees --delete-all            # delete all agent worktrees
 ```
 
 ### File ownership locks
@@ -99,21 +112,40 @@ View current locks with `grove ownership`.
 
 ---
 
-## Agent types
+## Agent roles
 
-Grove has two categories of agents:
+Grove defines 20+ specialized agent roles. Each role has its own timeout, retry limits, and custom instructions, all configurable in `grove.yaml`.
 
-### Pipeline agents
+### Core roles
 
-These execute in sequence as phases of a run:
+| Agent | Role | Default model |
+|---|---|---|
+| `architect` | Reads the codebase and produces a requirements/design document | claude-opus-4-6 |
+| `builder` | Implements code, runs tests | claude-sonnet-4-6 |
+| `tester` | Validates changes, writes/runs tests | claude-haiku-4-5 |
+| `reviewer` | Audits code quality, produces pass/fail verdict | claude-sonnet-4-6 |
+| `security` | Security audit of changes | claude-opus-4-6 |
+| `debugger` | Diagnoses and fixes failures (triggered on error) | claude-sonnet-4-6 |
+| `refactorer` | Refactoring and code cleanup | claude-haiku-4-5 |
+| `documenter` | Updates README, changelog, inline comments | claude-haiku-4-5 |
+| `validator` | Cross-step integration checks | claude-sonnet-4-6 |
 
-| Agent | Role | Can write files | Can run commands |
-|---|---|---|---|
-| `build_prd` | Writes a product requirements doc from the objective | Yes | No |
-| `plan_system_design` | Designs architecture, data models, and implementation plan | Yes | No |
-| `builder` | Implements code, runs tests | Yes | Yes |
-| `reviewer` | Audits changes, produces PASS/FAIL verdict | Yes | Yes |
-| `judge` | Final quality arbiter: APPROVED / NEEDS_WORK / REJECTED | Yes | No |
+### Extended roles
+
+| Agent | Role |
+|---|---|
+| `prd` | Writes product requirements docs |
+| `spec` | Writes technical specifications |
+| `judge` | Final quality arbiter: APPROVED / NEEDS_WORK |
+| `qa` | Quality assurance testing |
+| `devops` | Infrastructure and deployment |
+| `optimizer` | Performance optimization |
+| `accessibility` | Accessibility compliance checks |
+| `compliance` | Regulatory compliance checks |
+| `dependency_manager` | Dependency updates and CVE fixes |
+| `reporter` | Run summary and reporting |
+| `migration_planner` | Database/API migration planning |
+| `project_manager` | Project coordination |
 
 ### Graph agents
 
@@ -121,28 +153,49 @@ These power the graph-based orchestration mode (see [Graphs](#graphs) below):
 
 | Agent | Role |
 |---|---|
-| `pre_planner` | Generates missing foundational docs (PRD, system design, guidelines) |
+| `pre_planner` | Generates missing foundational docs (PRD, system design) |
 | `graph_creator` | Decomposes specs into phases and steps via MCP tools |
 | `builder` | Implements each step (shared with pipeline mode) |
-| `verdict` | Reviews builder output, runs tests/lints (read-only, can run commands) |
-| `phase_validator` | Cross-step integration check, runs integration tests (read-only, can run commands) |
-| `phase_judge` | Holistic phase grading (read-only, no commands) |
+| `verdict` | Reviews builder output, runs tests/lints |
+| `phase_validator` | Cross-step integration check, runs integration tests |
+| `phase_judge` | Holistic phase grading |
+
+---
+
+## Coding agent backends
+
+Grove orchestrates agent sessions by spawning external coding agent CLIs. The default is Claude Code, but you can route runs through any supported backend:
+
+| Backend | Command | Auto-approve flag |
+|---|---|---|
+| Claude Code | `claude` | `--dangerously-skip-permissions` |
+| Gemini | `gemini` | `--yolo` |
+| Codex | `codex` | `--full-auto` |
+| Aider | `aider` | `--yes` |
+| Cursor | `cursor-agent` | `-f` |
+| Copilot | `copilot` | `--allow-all-tools` |
+| Qwen Code | `qwen` | `--yolo` |
+| OpenCode | `opencode` | (keystroke injection) |
+| Kimi | `kimi` | `--yolo` |
+| Amp | `amp` | — |
+| Goose | `goose` | — |
+| Cline | `cline` | `--yolo` |
+| Continue | `cn` | — |
+| Kiro | `kiro-cli` | — |
+| Auggie | `auggie` | — |
+| Kilocode | `kilocode` | `--auto` |
+
+Set the default backend in `grove.yaml` under `providers.default`.
 
 ---
 
 ## Pipelines
 
-A **pipeline** is the ordered sequence of agent phases that a run executes through. Named pipelines are on the roadmap and will let you pick a preset sequence (e.g., plan-only, build-only, full end-to-end) with a single flag.
-
-> **Coming soon:** Named pipeline presets (`--pipeline bugfix`, `--pipeline security-audit`, etc.) are planned for an upcoming release.
+A **pipeline** is the ordered sequence of agent phases that a run executes through. The default pipeline runs: architect → builder(s) → reviewer → tester.
 
 ### Phase gates
 
 Pipelines support **phase gates** — pause points between stages where you can review the agent's output before it continues. When a gate is reached, the run moves to `waiting_for_gate` state and waits for approval.
-
-```bash
-grove status         # shows: waiting_for_gate
-```
 
 Gate approval is available via the desktop GUI.
 
@@ -167,7 +220,7 @@ Graph
 
 Each step goes through a mini-pipeline: Builder → Verdict → (Phase) Validator → Judge.
 
-The graph system is used automatically by the `graph_creator` agent. You can also interact with it via the MCP server tools (`grove_create_graph`, `grove_add_phase`, `grove_add_step`, etc.).
+The graph system is used automatically by the `graph_creator` agent. You can also interact with it via the MCP server tools.
 
 ---
 
@@ -201,13 +254,7 @@ Every run has a **budget** — a maximum USD amount to spend. The budget is enfo
 | 80% used (warning) | Grove logs a warning; the run continues |
 | 100% used (hard stop) | Grove terminates the current session and marks the run failed |
 
-Set a budget per run:
-
-```bash
-grove run "big refactor" --budget-usd 20.00
-```
-
-Or set a project default in `grove.yaml`:
+The default budget is $5.00 per run. Configure it in `grove.yaml`:
 
 ```yaml
 budgets:
@@ -216,11 +263,10 @@ budgets:
   hard_stop_percent: 100
 ```
 
-Track spending across runs:
+Track spending per run:
 
 ```bash
-grove costs              # breakdown by agent type + recent runs
-grove report <run-id>    # per-session cost for one run
+grove report <run-id>    # per-session cost for a completed run
 ```
 
 ---
@@ -234,15 +280,14 @@ The default strategy is `last_writer_wins` — later agents overwrite earlier on
 ```yaml
 merge:
   strategy: last_writer_wins   # or: first_writer_wins
-  conflict_strategy: markers   # or: ours, theirs, abort
 ```
 
-If a merge conflict cannot be resolved automatically, Grove marks the run with a `conflict` status and records the conflicting files. Inspect and resolve them:
+If a merge conflict cannot be resolved automatically, Grove records the conflicting files. Inspect them:
 
 ```bash
 grove conflicts                        # list unresolved conflicts
-grove conflicts --show path/to/file    # show conflict details
-grove conflicts --resolve path/to/file # mark as resolved
+grove conflicts --show <run-id>        # filter by run
+grove merge-status <conversation-id>   # view merge queue for a conversation
 ```
 
 ---
@@ -260,17 +305,10 @@ Checkpoints are stored in the local SQLite database and persist across machine r
 Agents within the same run can send **signals** to each other via the signal system. This is used internally by the orchestrator but can also be used directly:
 
 ```bash
-# Send a signal from one agent to another
-grove signal send <run-id> architect builder status --payload '{"ready":true}'
-
-# Check signals for an agent
-grove signal check <run-id> builder
-
-# List all signals for a run
+grove signal send <run-id> <from> <to> <type> --payload '{"ready":true}'
+grove signal check <run-id> <agent>
 grove signal list <run-id>
 ```
-
-Signal priorities: `low`, `normal`, `high`, `urgent`.
 
 ---
 
@@ -300,22 +338,6 @@ providers:
 
 ---
 
-## Automation
-
-> **Experimental:** The automation system is under active development. APIs and behavior may change.
-
-Grove's automation system lets you trigger agent runs automatically based on events — schedules, webhooks, file changes, or external signals — without having to invoke `grove run` manually.
-
-Automations are defined as YAML files (or via the GUI) and support:
-- **Schedules** — run an objective on a cron expression (e.g., nightly test runs)
-- **Webhooks** — trigger a run when an external service posts to a Grove endpoint
-- **Conditions** — only fire when specific criteria are met (e.g., branch name, file pattern)
-- **Notifications** — send alerts when an automation fires or fails
-
-This feature is currently experimental. We are actively working on it and the interface will stabilize in an upcoming release.
-
----
-
 ## Event log and audit trail
 
 Every state change, agent action, and cost event is recorded in an **append-only event log** in the local SQLite database. The events table has database-level triggers that prevent updates or deletes, ensuring the log is tamper-evident.
@@ -323,8 +345,6 @@ Every state change, agent action, and cost event is recorded in an **append-only
 Access the event log:
 
 ```bash
-grove logs <run-id>          # last 200 events (default)
+grove logs <run-id>          # recent events (default)
 grove logs <run-id> --all    # all events for a run
 ```
-
-A separate **audit log** records every state transition for runs and sessions, including old and new states with timestamps.

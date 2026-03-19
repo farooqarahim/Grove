@@ -616,8 +616,7 @@ pub async fn run_graph_loop(
 /// Read the current runtime status from the DB.
 fn check_runtime_status(conn: &Connection, graph_id: &str) -> GroveResult<RuntimeStatus> {
     let current_graph = grove_graph_repo::get_graph(conn, graph_id)?;
-    RuntimeStatus::try_from(current_graph.runtime_status.as_str())
-        .map_err(GroveError::Runtime)
+    RuntimeStatus::try_from(current_graph.runtime_status.as_str()).map_err(GroveError::Runtime)
 }
 
 /// Collect step outcomes for a phase (used by orchestrator context).

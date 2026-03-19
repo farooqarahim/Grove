@@ -9,7 +9,7 @@ This guide walks you through installing Grove, running your first objective, and
 Before installing Grove, make sure you have:
 
 - **Rust 1.85+** — install via [rustup.rs](https://rustup.rs/)
-- **Git 2.30+** — required for git worktree support (`git worktree` was added in 2.5 but 2.30 is recommended for reliability)
+- **Git 2.30+** — required for git worktree support
 - **Claude Code CLI** — the `claude` binary; install from [claude.ai/code](https://claude.ai/code)
 - **Node.js 18+** — only needed if you want to use the desktop GUI
 
@@ -28,11 +28,8 @@ claude --version      # any recent version
 ### From source (recommended)
 
 ```bash
-git clone https://github.com/farooqarahim/grove.git
-cd grove
-
-# Run the bootstrap script (checks toolchain, verifies dependencies)
-./scripts/bootstrap.sh
+git clone https://github.com/farooqarahim/Grove.git
+cd Grove
 
 # Install the grove binary to ~/.cargo/bin/
 cargo install --path crates/grove-cli
@@ -41,8 +38,8 @@ cargo install --path crates/grove-cli
 Make sure `~/.cargo/bin` is in your `PATH`:
 
 ```bash
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
-source ~/.bashrc
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc  # or ~/.bashrc
+source ~/.zshrc
 ```
 
 ### Verify the install
@@ -65,7 +62,7 @@ It checks for:
 - Required binaries (`git`, `claude`)
 - Git version compatibility
 - Database accessibility
-- Workspace configuration
+- Configuration validity
 
 If anything is wrong, it tells you exactly what to fix. Use `grove doctor --fix` to apply automatic fixes, or `grove doctor --fix-all` to apply every available fix at once.
 
@@ -101,8 +98,6 @@ The defaults are sensible for most projects. See [Configuration](configuration.m
 
 Grove needs credentials to call the AI provider that powers the agent sessions.
 
-### Option A: Use your own API key
-
 ```bash
 # Anthropic (Claude) — the default provider
 grove auth set anthropic sk-ant-api03-...
@@ -117,15 +112,7 @@ grove auth set deepseek sk-...
 grove auth set inception <token>
 ```
 
-Keys are stored using your OS keychain (Keychain on macOS, libsecret on Linux) with `0o600` permissions. They are never written to disk in plaintext.
-
-### Option B: Use Grove workspace credits
-
-If your workspace has credits loaded, you can use Grove's pooled API key instead of your own:
-
-```bash
-grove llm select anthropic claude-sonnet-4-6 --workspace-credits
-```
+Keys are stored using your OS keychain (Keychain on macOS, libsecret on Linux). They are never written to disk in plaintext.
 
 ### Verify auth
 
@@ -135,7 +122,19 @@ grove auth list
 
 ---
 
-## 6. Run your first objective
+## 6. Select an LLM
+
+Choose which LLM provider and model to use:
+
+```bash
+grove llm list                              # show all providers and auth status
+grove llm models anthropic                  # list available models
+grove llm select anthropic claude-sonnet-4-6  # set as default
+```
+
+---
+
+## 7. Run your first objective
 
 ```bash
 grove run "add a health check endpoint to the API"
@@ -143,17 +142,16 @@ grove run "add a health check endpoint to the API"
 
 Grove will:
 
-1. **Plan** — an architect agent reads your codebase and writes a product requirements doc (`GROVE_PRD_<id>.md`) in the worktree
-2. **Design** — a system design agent turns the PRD into a technical spec (`GROVE_DESIGN_<id>.md`)
-3. **Build** — one or more builder agents implement the changes in isolated worktrees
-4. **Review** — a reviewer agent audits the code and produces a review doc (`GROVE_REVIEW_<id>.md`)
-5. **Judge** — a judge agent gives the final APPROVED / NEEDS_WORK verdict (`GROVE_VERDICT_<id>.md`)
-6. **Merge** — completed branches are merged into the conversation branch
-7. **Publish** — Grove opens a pull request (or pushes directly, depending on `publish.target`)
+1. **Plan** — an architect agent reads your codebase and produces a requirements doc
+2. **Build** — one or more builder agents implement the changes in isolated worktrees
+3. **Test** — a tester agent validates the changes
+4. **Review** — a reviewer agent audits the code
+5. **Merge** — completed branches are merged into the conversation branch
+6. **Publish** — Grove opens a pull request (or pushes directly, depending on `publish.target`)
 
 ---
 
-## 7. Monitor progress
+## 8. Monitor progress
 
 ### Check run status
 
@@ -161,35 +159,27 @@ Grove will:
 grove status
 ```
 
-Shows the most recent 20 runs with their state, agent, and cost so far.
+Shows the most recent 20 runs with their state, agent type, and creation time.
 
 ### Watch live output
 
-While a run is active, you can tail its event log:
+While a run is active, you can view its event log:
 
 ```bash
 grove logs <run-id>
 ```
 
-Or watch the structured plan:
+Or inspect the structured plan:
 
 ```bash
 grove plan <run-id>
 ```
 
-### Check costs
-
-```bash
-grove costs
-```
-
-Shows cost breakdown by agent type and a summary of recent runs.
-
 ---
 
-## 8. View the report
+## 9. View the report
 
-When a run completes, generate a full report:
+When a run completes, view its report:
 
 ```bash
 grove report <run-id>
@@ -198,13 +188,11 @@ grove report <run-id>
 The report includes:
 - Objective and final verdict
 - Per-agent cost breakdown
-- Files changed
-- Merge status
-- PR URL (if published)
+- Total spend
 
 ---
 
-## 9. Resume an interrupted run
+## 10. Resume an interrupted run
 
 If a run is interrupted (crash, kill signal, network error), resume it from the last checkpoint:
 
@@ -216,7 +204,7 @@ Grove replays from the last saved stage transition, skipping already-completed w
 
 ---
 
-## 10. Clean up
+## 11. Clean up
 
 Agent worktrees accumulate on disk. Clean them up when you're done:
 
@@ -235,4 +223,4 @@ grove gc
 - [Concepts](concepts.md) — understand runs, pipelines, graphs, and more
 - [CLI Reference](cli-reference.md) — full command and flag reference
 - [Configuration](configuration.md) — tune Grove for your project
-- [Integrations](integrations.md) — connect GitHub Issues, Jira, Linear, and other LLM providers
+- [Integrations](integrations.md) — connect issue trackers and configure LLM providers

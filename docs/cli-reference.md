@@ -9,7 +9,7 @@ These flags are accepted by every subcommand:
 | Flag | Default | Description |
 |---|---|---|
 | `--project <path>` | `.` | Path to the project root (directory containing `.grove/`) |
-| `--format <text\|json>` | `text` | Output format. `json` emits machine-readable output. |
+| `--json` | off | Emit machine-readable JSON output |
 | `--verbose` | off | Enable verbose logging |
 | `--no-color` | off | Disable ANSI color output |
 
@@ -20,14 +20,10 @@ These flags are accepted by every subcommand:
 Initialize Grove in the current git repository.
 
 ```bash
-grove init [--force]
+grove init
 ```
 
 Creates `.grove/grove.yaml`, `.grove/grove.db`, and `.grove/worktrees/`. Adds `.grove/worktrees/` and `.grove/grove.db` to `.gitignore`.
-
-| Flag | Description |
-|---|---|
-| `--force` | Re-initialize even if `.grove/` already exists |
 
 ---
 
@@ -39,7 +35,7 @@ Run a preflight check and report environment issues.
 grove doctor [--fix] [--fix-all]
 ```
 
-Checks for required binaries, Git version, database health, and workspace configuration.
+Checks for required binaries, Git version, database health, and configuration validity.
 
 | Flag | Description |
 |---|---|
@@ -58,34 +54,22 @@ grove run "<objective>" [options]
 
 | Flag | Description |
 |---|---|
-| `--budget-usd <amount>` | Maximum USD to spend (overrides project default) |
 | `--max-agents <n>` | Maximum parallel agent sessions |
-| `--model <model-id>` | Claude model for all agents (e.g. `claude-opus-4-6`) |
-| `--pipeline <name>` | Named pipeline to use (coming soon — see [Concepts](concepts.md#pipelines)) |
-| `--interactive` | Pause after every agent for review |
-| `--pause-after <agents>` | Comma-separated list of agent types to pause after (e.g. `architect,tester`) |
-| `--permission-mode <mode>` | Tool permission mode: `skip_all`, `human_gate`, `autonomous_gate` |
+| `--model <model-id>` | LLM model for agents (e.g. `claude-sonnet-4-6`) |
+| `--pipeline <name>` | Named pipeline to use |
+| `--permission-mode <mode>` | Tool permission mode: `skip-all`, `human-gate`, `autonomous-gate` |
 | `--conversation <id>` | Continue an existing conversation thread |
 | `-c, --continue-last` | Continue the most recent conversation for this project |
 | `--issue <id>` | Link this run to an external issue by ID |
+| `--watch` | Live TUI view (requires the `tui` compile-time feature) |
 
 **Examples:**
 
 ```bash
-# Simple run with default pipeline
 grove run "add a /health endpoint"
-
-# Use a specific pipeline and model
-grove run "refactor auth module" --pipeline refactor --model claude-opus-4-6
-
-# Set a $15 budget and cap at 5 parallel agents
-grove run "migrate to PostgreSQL" --budget-usd 15 --max-agents 5
-
-# Continue working on the last conversation
+grove run "refactor auth module" --model claude-opus-4-6
 grove run "now add rate limiting" --continue-last
-
-# Pause after the architect to review the design before building
-grove run "redesign database schema" --pause-after build_prd,plan_system_design
+grove run "redesign database schema" --permission-mode human-gate
 ```
 
 ---
@@ -100,9 +84,8 @@ grove queue "<objective>" [options]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--budget-usd <amount>` | project default | Maximum USD for this task |
 | `--priority <n>` | `0` | Higher values run first; ties broken by queue time |
-| `--model <model-id>` | — | Claude model to use when this task executes |
+| `--model <model-id>` | — | LLM model to use when this task executes |
 | `--conversation <id>` | — | Continue an existing conversation |
 | `-c, --continue-last` | — | Continue the most recent conversation |
 
@@ -140,12 +123,13 @@ Only tasks in `queued` state can be cancelled.
 Show recent run status.
 
 ```bash
-grove status [--limit <n>]
+grove status [--limit <n>] [--watch]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `--limit <n>` | `20` | Number of recent runs to show |
+| `--watch` | — | Live TUI view (requires `tui` feature) |
 
 ---
 
@@ -173,7 +157,7 @@ Sends a termination signal to all active sessions and marks the run as failed.
 
 ## `grove logs`
 
-Stream events from a run.
+View events from a run.
 
 ```bash
 grove logs <run-id> [--all]
@@ -181,19 +165,19 @@ grove logs <run-id> [--all]
 
 | Flag | Description |
 |---|---|
-| `--all` | Show all events (default: last 200) |
+| `--all` | Show all events (default: most recent) |
 
 ---
 
 ## `grove report`
 
-Display a structured report for a completed run.
+Display a structured cost report for a completed run.
 
 ```bash
 grove report <run-id>
 ```
 
-Includes: objective, verdict, per-agent costs, files changed, merge status, and PR URL.
+Includes: total spend, per-agent cost breakdown.
 
 ---
 
@@ -242,21 +226,7 @@ grove worktrees [options]
 | `--clean` | Delete all finished (completed/failed) worktrees |
 | `--delete <session-id>` | Delete a specific worktree by session ID |
 | `--delete-all` | Delete all agent worktrees (active sessions are skipped) |
-| `-y, --yes` | Skip confirmation prompt for `--delete-all` |
-
----
-
-## `grove costs`
-
-Show cost breakdown by agent type and recent runs.
-
-```bash
-grove costs [--recent-runs <n>]
-```
-
-| Flag | Default | Description |
-|---|---|---|
-| `--recent-runs <n>` | `5` | Number of completed runs to include |
+| `-y` | Skip confirmation prompt for `--delete-all` |
 
 ---
 
@@ -284,22 +254,21 @@ grove merge-status <conversation-id>
 
 ## `grove conflicts`
 
-List and resolve merge conflicts from the most recent run.
+List and inspect merge conflicts.
 
 ```bash
-grove conflicts [--show <path>] [--resolve <path>]
+grove conflicts [--show <run-id>]
 ```
 
 | Flag | Description |
 |---|---|
-| `--show <path>` | Show conflict details for a specific file path |
-| `--resolve <path>` | Mark a conflict as resolved and remove its artifacts |
+| `--show <run-id>` | Filter conflicts by a specific run ID |
 
 ---
 
 ## `grove cleanup`
 
-Clean up finished worktrees with filtering options.
+Clean up finished resources.
 
 ```bash
 grove cleanup [options]
@@ -307,11 +276,11 @@ grove cleanup [options]
 
 | Flag | Description |
 |---|---|
-| `--project <id>` | Only clean worktrees for this project |
-| `--conversation <id>` | Only clean worktrees for this conversation |
+| `--project` | Clean up archived/deleted projects |
+| `--conversation` | Clean up archived/deleted conversations |
 | `--dry-run` | Show what would be deleted without deleting |
-| `-y, --yes` | Skip confirmation prompt |
-| `--force` | Force-release all pool slots and delete all worktree directories, even for active sessions |
+| `-y` | Skip confirmation prompt |
+| `--force` | Force-release all pool slots and delete all worktree directories |
 
 ---
 
@@ -347,13 +316,13 @@ grove project show
 grove project list
 grove project open-folder <path> [--name "<name>"]
 grove project clone <repo-url> <path> [--name "<name>"]
-grove project create-repo <repo> <path> [--provider github|gitlab|bitbucket] [--visibility private|public]
-grove project fork-repo <source-path> <target-path> <repo> [--provider github]
-grove project fork-folder <source-path> <target-path> [--preserve-git]
+grove project create-repo <repo> <path> [--provider <name>] [--visibility <vis>] [--gitignore <template>]
+grove project fork-repo <source> <target> <repo> [--provider <name>]
+grove project fork-folder <source> <target> [--preserve-git]
 grove project ssh <host> <remote-path> [--user <user>] [--port <port>]
-grove project ssh-shell <id>
+grove project ssh-shell [<id>]
 grove project set-name "<name>"
-grove project set [--provider <id>] [--project-key <key>] [--parallel <n>] [--pipeline <name>] [--budget <usd>] [--permission-mode <mode>]
+grove project set [--provider <name>] [--parallel <n>] [--pipeline <name>] [--permission-mode <mode>] [--reset]
 grove project archive [<id>]
 grove project delete [<id>]
 ```
@@ -375,7 +344,7 @@ grove conversation merge <id>
 
 `rebase` rebases the conversation branch onto the latest default branch. If there are conflicts, the branch is left unchanged and the conflicting files are reported.
 
-`merge` merges the conversation branch into the project's default branch. Uses the configured strategy: `direct` (git merge --no-ff) or `github` (push + open PR via `gh`).
+`merge` merges the conversation branch into the project's default branch.
 
 ---
 
@@ -391,7 +360,7 @@ grove auth list
 
 Supported providers: `anthropic`, `openai`, `deepseek`, `inception`.
 
-Keys are stored in the OS keychain with `0o600` permissions.
+Keys are stored in the OS keychain.
 
 ---
 
@@ -403,18 +372,17 @@ Browse and configure LLM providers and models.
 grove llm list
 grove llm models <provider>
 grove llm select <provider> [<model-id>] [--own-key | --workspace-credits]
-grove llm credits balance
-grove llm credits add <amount-usd>
 ```
 
 **Examples:**
 
 ```bash
-grove llm list                                              # show all providers and auth status
-grove llm models anthropic                                  # list Anthropic models
-grove llm select anthropic claude-opus-4-6 --own-key        # use Opus with your own key
-grove llm select anthropic claude-sonnet-4-6 --workspace-credits  # use workspace credits
+grove llm list                                 # show all providers and auth status
+grove llm models anthropic                     # list Anthropic models
+grove llm select anthropic claude-sonnet-4-6   # set as default
 ```
+
+> **Note:** `--own-key` and `--workspace-credits` are recognized but not yet fully supported.
 
 ---
 
@@ -423,16 +391,10 @@ grove llm select anthropic claude-sonnet-4-6 --workspace-credits  # use workspac
 Send and receive inter-agent signals within a run.
 
 ```bash
-grove signal send <run-id> <from> <to> <type> [--payload <json>] [--priority <level>]
+grove signal send <run-id> <from> <to> <type> [--payload <json>] [--priority <n>]
 grove signal check <run-id> <agent-name>
 grove signal list <run-id>
 ```
-
-`<to>` accepts: an agent name, or one of the group aliases `@all`, `@builders`, `@leads`.
-
-Signal types: `status`, `question`, `result`, `error`, `worker_done`, and any custom type.
-
-Signal priorities: `low`, `normal`, `high`, `urgent`.
 
 ---
 
@@ -443,23 +405,22 @@ Manage issues from connected external trackers.
 ```bash
 grove issue list [--cached]
 grove issue show <id>
-grove issue create "<title>" [--body <text>] [--labels <csv>] [--priority low|medium|high|critical]
+grove issue create "<title>" [--body <text>] [--labels <label>...] [--priority <level>]
 grove issue close <id>
-grove issue ready
+grove issue update <id> [--title <text>] [--status <status>] [--label <label>...] [--assignee <name>] [--priority <level>]
+grove issue comment <id> "<body>"
+grove issue assign <id> <assignee>
+grove issue move <id> <status>
+grove issue reopen <id>
+grove issue search "<query>" [--limit <n>] [--provider <name>]
 grove issue sync [--provider <name>] [--full]
 grove issue board [--status <status>] [--provider <name>] [--assignee <name>] [--priority <level>]
 grove issue board-config show
 grove issue board-config set --file <path>
 grove issue board-config reset
-grove issue search "<query>" [--limit <n>] [--provider <name>]
-grove issue update <id> [--title <text>] [--status <status>] [--label <label>] [--assignee <name>] [--priority <level>]
-grove issue comment <id> "<body>"
-grove issue assign <id> <assignee>
-grove issue move <id> <status>
-grove issue reopen <id>
-grove issue push <id> --to <provider>
 grove issue activity <id>
-grove issue lint [--fix]
+grove issue ready
+grove issue push <id> --to <provider>
 ```
 
 ---
@@ -479,16 +440,16 @@ grove fix --ready [options]
 | `--ready` | Fix all issues marked as "ready" in connected trackers |
 | `--max <n>` | Maximum number of ready issues to fix (with `--ready`) |
 | `--parallel` | Queue ready issues as parallel tasks instead of sequential |
-| `--budget-usd <amount>` | Budget per run |
-| `--model <model-id>` | Claude model to use |
 
 **Examples:**
 
 ```bash
 grove fix PROJ-123
 grove fix 42 --prompt "focus on the edge case with empty arrays"
-grove fix --ready --parallel --max 5
+grove fix --ready --max 5
 ```
+
+> **Note:** `--ready` and `--parallel` are recognized but depend on upstream grove-core support.
 
 ---
 
@@ -511,13 +472,12 @@ grove connect disconnect <provider>
 Run configured linters and show results.
 
 ```bash
-grove lint [--fix] [--budget-usd <amount>] [--model <model-id>]
+grove lint [--fix] [--model <model-id>]
 ```
 
 | Flag | Description |
 |---|---|
 | `--fix` | Spawn an agent run to fix lint issues after reporting |
-| `--budget-usd <amount>` | Budget for the fix run |
 | `--model <model-id>` | Model for the fix run |
 
 ---
@@ -530,25 +490,24 @@ Check CI status for a branch and optionally fix failures.
 grove ci [<branch>] [options]
 ```
 
-| Flag | Default | Description |
-|---|---|---|
-| `--wait` | — | Wait for all CI checks to finish (polls every 15s) |
-| `--timeout <seconds>` | `600` | Timeout when using `--wait` |
-| `--fix` | — | If CI is failing, spawn an agent run to fix the failures |
-| `--budget-usd <amount>` | — | Budget per fix run |
-| `--model <model-id>` | — | Model for the fix run |
+| Flag | Description |
+|---|---|
+| `--wait` | Wait for all CI checks to finish |
+| `--timeout <seconds>` | Timeout when using `--wait` |
+| `--fix` | If CI is failing, spawn an agent run to fix the failures |
+| `--model <model-id>` | Model for the fix run |
 
 ---
 
 ## `grove publish`
 
-Retry or inspect run publication.
+Retry run publication (push + PR creation).
 
 ```bash
 grove publish retry <run-id>
 ```
 
-Retries the publish phase (push + PR creation) for a completed run without re-running agents.
+Retries the publish phase for a completed run without re-running agents.
 
 ---
 
@@ -558,7 +517,7 @@ Git operations scoped to Grove's context.
 
 ```bash
 grove git status
-grove git stage [<paths...>]          # default: "."
+grove git stage <paths...>
 grove git unstage <paths...>
 grove git revert [<paths...>] [--all]
 grove git commit [-m "<message>"] [-a] [--push]
@@ -567,12 +526,22 @@ grove git pull
 grove git branch
 grove git log [-n <count>]
 grove git undo
-grove git pr [--title <text>] [--body <text>] [--base <branch>]
+grove git pr [--title <text>] [--body <text>] [--base <branch>] [--push]
 grove git pr-status
 grove git merge [--strategy squash|merge|rebase] [--admin]
 ```
 
-All git subcommands accept `--run-id <id>` to operate on a specific run's context.
+### `grove git pr`
+
+Creates a pull request via the `gh` CLI. Use `--push` to push the branch first.
+
+### `grove git pr-status`
+
+Shows PR details (number, title, state, URL, branches, author) via `gh pr view`.
+
+### `grove git merge`
+
+Merges the current PR via `gh pr merge`. Always deletes the remote branch after merge.
 
 ---
 
@@ -588,7 +557,6 @@ grove hook <event> <agent-type> [options]
 |---|---|
 | `--run-id <id>` | Run ID |
 | `--session-id <id>` | Session ID |
-| `--worktree <path>` | Worktree path |
 | `--tool <name>` | Tool name (for `pre_tool_use` / `post_tool_use` events) |
 | `--file-path <path>` | File path (for file-write guard checks) |
 
@@ -598,15 +566,13 @@ Supported events: `session_start`, `user_prompt_submit`, `pre_tool_use`, `post_t
 
 ## JSON output
 
-Any command supports `--format json` for machine-readable output:
+Any command supports `--json` for machine-readable output:
 
 ```bash
-grove status --format json
-grove costs --format json
-grove issue list --format json
+grove --json status
+grove --json issue list
+grove --json report <run-id>
 ```
-
-This is useful for scripting or piping into tools like `jq`.
 
 ---
 
@@ -616,7 +582,6 @@ This is useful for scripting or piping into tools like `jq`.
 |---|---|
 | `0` | Success |
 | `1` | General error |
-| `2` | Configuration or validation error |
-| `3` | Run failed or budget exceeded |
-| `4` | Conflict detected |
-| `5` | Not found |
+| `2` | Invalid argument or configuration error |
+| `3` | Resource not found |
+| `4` | Transport error (socket/connection failure) |

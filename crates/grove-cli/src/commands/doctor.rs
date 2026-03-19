@@ -4,7 +4,7 @@ use grove_core::app::GroveApp;
 
 use crate::cli::DoctorArgs;
 use crate::error::{CliError, CliResult};
-use crate::output::{text, OutputMode};
+use crate::output::{OutputMode, text};
 
 pub fn run(args: DoctorArgs, _project: &Path, mode: OutputMode) -> CliResult<()> {
     let app = GroveApp::init()?;

@@ -391,13 +391,8 @@ pub struct AuthArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum AuthAction {
-    Set {
-        provider: String,
-        api_key: String,
-    },
-    Remove {
-        provider: String,
-    },
+    Set { provider: String, api_key: String },
+    Remove { provider: String },
     List,
 }
 
@@ -434,15 +429,9 @@ pub struct WorkspaceArgs {
 #[derive(Debug, Subcommand)]
 pub enum WorkspaceAction {
     Show,
-    SetName {
-        name: String,
-    },
-    Archive {
-        id: String,
-    },
-    Delete {
-        id: String,
-    },
+    SetName { name: String },
+    Archive { id: String },
+    Delete { id: String },
 }
 
 #[derive(Debug, Args)]

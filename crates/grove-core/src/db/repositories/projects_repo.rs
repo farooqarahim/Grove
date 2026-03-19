@@ -70,6 +70,13 @@ pub struct ProjectSettings {
     /// Project-scoped issue board configuration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_board: Option<IssueBoardConfig>,
+    // ── LLM defaults ─────────────────────────────────────────────────────────
+    /// Default LLM provider (e.g. "anthropic", "openai").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_llm_provider: Option<String>,
+    /// Default LLM model within the selected provider (e.g. "claude-sonnet-4-6").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_llm_model: Option<String>,
 }
 
 impl ProjectSettings {

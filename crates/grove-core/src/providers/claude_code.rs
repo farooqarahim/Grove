@@ -714,21 +714,18 @@ impl ClaudeCodeProvider {
 
             // Capture stderr on a background thread so we always have it —
             // even if the process is killed by timeout.
-            let stderr_handle = child
-                .stderr
-                .take()
-                .and_then(|se| {
-                    std::thread::Builder::new()
-                        .name("claude-stderr".into())
-                        .spawn(move || {
-                            let mut buf = String::new();
-                            use std::io::Read;
-                            let mut reader = se;
-                            let _ = reader.read_to_string(&mut buf);
-                            buf
-                        })
-                        .ok()
-                });
+            let stderr_handle = child.stderr.take().and_then(|se| {
+                std::thread::Builder::new()
+                    .name("claude-stderr".into())
+                    .spawn(move || {
+                        let mut buf = String::new();
+                        use std::io::Read;
+                        let mut reader = se;
+                        let _ = reader.read_to_string(&mut buf);
+                        buf
+                    })
+                    .ok()
+            });
 
             // Emit a system event so the UI shows something while waiting for API response.
             sink.on_event(StreamOutputEvent::System {
@@ -940,21 +937,18 @@ impl ClaudeCodeProvider {
             );
 
             // Capture stderr on a background thread so we always have it.
-            let stderr_handle = child
-                .stderr
-                .take()
-                .and_then(|se| {
-                    std::thread::Builder::new()
-                        .name("claude-stderr-interactive".into())
-                        .spawn(move || {
-                            let mut buf = String::new();
-                            use std::io::Read;
-                            let mut reader = se;
-                            let _ = reader.read_to_string(&mut buf);
-                            buf
-                        })
-                        .ok()
-                });
+            let stderr_handle = child.stderr.take().and_then(|se| {
+                std::thread::Builder::new()
+                    .name("claude-stderr-interactive".into())
+                    .spawn(move || {
+                        let mut buf = String::new();
+                        use std::io::Read;
+                        let mut reader = se;
+                        let _ = reader.read_to_string(&mut buf);
+                        buf
+                    })
+                    .ok()
+            });
 
             // Emit a system event so the UI shows something while waiting for API response.
             sink.on_event(StreamOutputEvent::System {

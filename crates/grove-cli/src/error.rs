@@ -23,10 +23,10 @@ pub enum CliError {
 impl CliError {
     pub fn exit_code(&self) -> i32 {
         match self {
-            CliError::BadArg(_)    => 2,
-            CliError::NotFound(_)  => 3,
+            CliError::BadArg(_) => 2,
+            CliError::NotFound(_) => 3,
             CliError::Transport(_) => 4,
-            _                      => 1,
+            _ => 1,
         }
     }
 }

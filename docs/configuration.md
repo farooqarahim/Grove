@@ -2,7 +2,12 @@
 
 Grove is configured via a YAML file at `.grove/grove.yaml` in your project root. This file is created automatically by `grove init` and can be edited by hand.
 
-A complete example with all fields and their defaults is in `templates/config/grove.example.yaml`.
+Configuration is resolved in this order (later values override earlier ones):
+
+1. Built-in defaults
+2. `.grove/grove.yaml` in the project root
+3. `GROVE_*` environment variables
+4. Command-line flags
 
 ---
 
@@ -28,7 +33,6 @@ runtime:
   max_run_minutes: 60       # Hard wall-clock timeout for a run (minutes)
   max_concurrent_runs: 4    # Maximum runs active at once across all conversations
   log_level: "info"         # Logging verbosity: trace, debug, info, warn, error
-  lock_wait_timeout_secs: 5 # Seconds to wait when acquiring a file ownership lock
 ```
 
 ---
@@ -39,27 +43,23 @@ Configure which AI provider powers agent sessions and how it is invoked.
 
 ```yaml
 providers:
-  default: "claude_code"    # Default provider: "claude_code" or "mock"
+  default: "claude_code"    # Default provider
 
   claude_code:
     enabled: true
     command: "claude"                    # Path or name of the Claude Code CLI binary
-    timeout_seconds: 28800               # Per-session timeout (8 hours)
-    long_lived_run_host: false           # Keep a persistent claude process for the run
+    timeout_seconds: 300                 # Per-session timeout
     permission_mode: "skip_all"          # skip_all | human_gate | autonomous_gate
-    allowed_tools: []                    # Additional tools to allow (empty = use agent defaults)
-    gatekeeper_model: null               # Model for autonomous_gate mode (null = same model)
+    allowed_tools: []                    # Additional tools to allow
     max_output_bytes: 10485760           # Maximum bytes of output to capture per session (10 MB)
-    max_file_size_mb: null               # Limit on files the agent can read (null = unlimited)
-    max_open_files: null                 # Limit on simultaneously open files (null = unlimited)
 
   mock:
     enabled: true                        # Enable the mock provider for testing
 ```
 
-### Coding agent overrides
+### Coding agent backends
 
-You can configure individual coding agent backends (Claude Code, Gemini, Codex, Aider, Cursor) under `providers.coding_agents`. This is an advanced option; the defaults work for most setups.
+Grove supports 15+ external coding agent CLIs. Configure them under `providers.coding_agents`:
 
 ```yaml
 providers:
@@ -67,17 +67,15 @@ providers:
     claude_code:
       enabled: true
       command: "claude"
-      timeout_seconds: 28800
+      timeout_seconds: 300
       auto_approve_flag: "--dangerously-skip-permissions"
-      initial_prompt_flag: "--print"
-      use_keystroke_injection: false
-      use_pty: false
       model_flag: "--model"
       max_output_bytes: 10485760
 
     gemini:
       enabled: true
       command: "gemini"
+      timeout_seconds: 300
       auto_approve_flag: "--yolo"
       initial_prompt_flag: "-i"
       model_flag: "--model"
@@ -85,31 +83,150 @@ providers:
     codex:
       enabled: true
       command: "codex"
+      timeout_seconds: 300
       auto_approve_flag: "--full-auto"
       model_flag: "--model"
 
     aider:
       enabled: true
       command: "aider"
+      timeout_seconds: 300
       auto_approve_flag: "--yes"
       initial_prompt_flag: "--message"
       model_flag: "--model"
+
+    cursor:
+      enabled: true
+      command: "cursor-agent"
+      timeout_seconds: 300
+      auto_approve_flag: "-f"
+
+    copilot:
+      enabled: true
+      command: "copilot"
+      timeout_seconds: 300
+      auto_approve_flag: "--allow-all-tools"
+
+    goose:
+      enabled: true
+      command: "goose"
+      timeout_seconds: 300
+
+    cline:
+      enabled: true
+      command: "cline"
+      timeout_seconds: 300
+      auto_approve_flag: "--yolo"
+
+    kiro:
+      enabled: true
+      command: "kiro-cli"
+      timeout_seconds: 300
+      default_args: ["chat"]
+
+    # Additional backends: qwen_code, opencode, kimi, amp, continue, auggie, kilocode
 ```
 
-### Agent-level model overrides
+---
 
-Assign specific models to specific agent types:
+## `agent_models`
+
+Assign specific LLM models to specific agent roles:
 
 ```yaml
-providers:
-  agent_models:
-    models:
-      build_prd: "claude-opus-4-6"
-      plan_system_design: "claude-opus-4-6"
-      builder: "claude-sonnet-4-6"
-      reviewer: "claude-sonnet-4-6"
-      judge: "claude-opus-4-6"
-      default: "claude-sonnet-4-6"
+agent_models:
+  architect: "claude-opus-4-6"
+  builder: "claude-sonnet-4-6"
+  tester: "claude-haiku-4-5-20251001"
+  documenter: "claude-haiku-4-5-20251001"
+  security: "claude-opus-4-6"
+  reviewer: "claude-sonnet-4-6"
+  debugger: "claude-sonnet-4-6"
+  refactorer: "claude-haiku-4-5-20251001"
+  validator: "claude-sonnet-4-6"
+  default: "claude-sonnet-4-6"
+```
+
+---
+
+## `agents`
+
+Per-agent-role configuration. Every role supports `timeout_secs`, `max_retries`, and `custom_instructions`. Some roles have additional fields.
+
+```yaml
+agents:
+  architect:
+    timeout_secs: 600
+    max_retries: 1
+    custom_instructions: ""
+
+  builder:
+    timeout_secs: 300
+    max_retries: 2
+    custom_instructions: ""
+
+  tester:
+    timeout_secs: 300
+    max_retries: 2
+    custom_instructions: ""
+
+  reviewer:
+    enabled: true
+    timeout_secs: 300
+    max_retries: 1
+    custom_instructions: ""
+    on_fail: "block"             # block | warn — action when review fails
+    max_retry_cycles: 1
+
+  debugger:
+    enabled: true
+    timeout_secs: 300
+    max_retries: 2
+    custom_instructions: ""
+    trigger: "on_failure"        # when to activate: on_failure
+
+  security:
+    enabled: false
+    timeout_secs: 600
+    max_retries: 1
+    custom_instructions: ""
+    on_critical: "block"
+    on_high: "warn"
+    auto_tools: true
+
+  refactorer:
+    timeout_secs: 600
+    max_retries: 3
+    custom_instructions: ""
+    verify_after_each_change: true
+
+  documenter:
+    enabled: false
+    timeout_secs: 300
+    max_retries: 1
+    custom_instructions: ""
+    update_readme: true
+    update_changelog: true
+    update_inline_comments: true
+
+  validator:
+    enabled: true
+    timeout_secs: 300
+    max_retries: 1
+    custom_instructions: ""
+    on_partial: "warn"
+    on_failed: "fail"
+
+  judge:
+    enabled: false
+    timeout_secs: 300
+    max_retries: 1
+    custom_instructions: ""
+    on_needs_work: "warn"
+
+  # Additional roles (disabled by default):
+  # prd, spec, qa, devops, optimizer, accessibility, compliance,
+  # dependency_manager, reporter, migration_planner, project_manager
 ```
 
 ---
@@ -125,8 +242,6 @@ budgets:
   hard_stop_percent: 100         # Terminate the run at this % consumed
 ```
 
-Override the budget for a single run with `grove run --budget-usd <amount>`.
-
 ---
 
 ## `orchestration`
@@ -135,11 +250,9 @@ Control the orchestration engine behavior.
 
 ```yaml
 orchestration:
-  enforce_design_first: true    # Require PRD + design docs before building
+  enforce_design_first: true    # Require design docs before building
   enable_retries: true          # Retry failed agent sessions
   max_retries_per_session: 2    # Maximum retry attempts per session
-  enable_run_mcp: true          # Inject MCP server tools into agent sessions
-  max_spawn_depth: 3            # Maximum nesting depth for spawned sub-runs
 ```
 
 ---
@@ -154,11 +267,8 @@ worktree:
   branch_prefix: "grove"            # Prefix for agent branch names (e.g. grove/abc123)
   fetch_before_run: true            # Run git fetch before starting a run
   sync_before_run: "merge"          # How to sync before a run: merge | rebase | none
-  cleanup_on_success: false         # Auto-delete worktrees when a run completes successfully
   cleanup_remote_branches: false    # Also delete remote tracking branches on cleanup
-  min_disk_bytes: 1073741824        # Minimum free disk space to allow a new worktree (1 GiB)
   pull_before_publish: true         # Pull latest before pushing results
-  pull_before_publish_timeout_secs: 120
 
   # Files from .gitignore that should be copied into each worktree
   copy_ignored:
@@ -198,22 +308,6 @@ Configure how agent branches are merged together.
 ```yaml
 merge:
   strategy: "last_writer_wins"     # last_writer_wins | first_writer_wins
-  conflict_strategy: "markers"     # markers | ours | theirs | abort
-  conflict_timeout_secs: 300       # Seconds to wait for conflict resolution before aborting
-  binary_strategy: "last_writer"   # How to handle binary file conflicts: last_writer | first_writer | abort
-  lockfile_strategy: "regenerate"  # How to handle lockfile conflicts: regenerate | last_writer | abort
-
-  # Commands to regenerate lockfiles after a conflict
-  lockfile_commands:
-    "package-lock.json": "npm install"
-    "yarn.lock": "yarn install"
-    "Cargo.lock": "cargo build"
-    "poetry.lock": "poetry lock"
-
-  # Per-agent-type priority (lower number = higher priority)
-  priorities:
-    build_prd: 0
-    builder: 10
 ```
 
 ---
@@ -258,9 +352,12 @@ The watchdog monitors sessions for stalls and takes corrective action.
 ```yaml
 watchdog:
   enabled: true
-  stall_threshold_secs: 300        # Mark a session as stalled after this many seconds without a heartbeat
-  check_interval_secs: 60          # How often to poll for stalled sessions
-  action: "kill"                   # What to do when a stall is detected: kill | warn | ignore
+  boot_timeout_secs: 120          # Seconds to wait for agent to start producing output
+  stale_threshold_secs: 300       # Mark a session as stalled after this many seconds without a heartbeat
+  zombie_threshold_secs: 600      # Kill a session that has been stalled for this long
+  max_agent_lifetime_secs: 3600   # Maximum lifetime for a single agent session (1 hour)
+  max_run_lifetime_secs: 7200     # Maximum lifetime for an entire run (2 hours)
+  poll_interval_secs: 30          # How often to poll for stalled sessions
 ```
 
 ---
@@ -271,10 +368,11 @@ Run shell commands at Grove lifecycle events. Hooks are executed in the project 
 
 ```yaml
 hooks:
-  pre_run: "echo 'starting run'"
-  post_run: "notify-send 'Grove run complete'"
-  pre_session: ""
-  post_session: ""
+  post_run: []
+  # Examples:
+  #   post_run: ["npm install"]
+  #   post_run: ["pip install -r requirements.txt"]
+  #   post_run: ["cargo build"]
 ```
 
 ---
@@ -285,95 +383,40 @@ Configure external issue tracker integration. See [Integrations](integrations.md
 
 ```yaml
 tracker:
-  provider: "github"               # github | jira | linear | grove | none
-  project_key: "owner/repo"        # Provider-specific project identifier
-  auto_sync: false                 # Sync issues from the tracker before each run
-  sync_interval_secs: 3600        # How often to sync if auto_sync is enabled
+  mode: "disabled"               # disabled | external
+  # external:
+  #   provider: "github"
+  #   create: "gh issue create --title '{title}' --body '{body}' --json number,title,state,labels"
+  #   show: "gh issue view {id} --json number,title,state,labels,body"
+  #   list: "gh issue list --state open --json number,title,state,labels"
+  #   close: "gh issue close {id}"
+  #   ready: "gh issue list --label ready --json number,title,state,labels"
 ```
 
 ---
 
-## `linter`
+## `webhook`
 
-Configure linters that Grove runs and reports on.
+Configure webhook-triggered automation.
 
 ```yaml
-linter:
+webhook:
   enabled: false
-  commands:
-    - name: "eslint"
-      command: "npx eslint . --format json"
-      format: "eslint_json"
-    - name: "clippy"
-      command: "cargo clippy --message-format json"
-      format: "cargo_json"
-```
-
----
-
-## `discipline`
-
-Configure constraints on what agents are allowed to do.
-
-```yaml
-discipline:
-  enforce_design_first: true       # Agents must produce design docs before writing code
-  require_tests: false             # Reject completions without test files
-  max_files_per_session: 50        # Maximum files an agent may touch in one session
+  port: 8473
+  secret: ""
 ```
 
 ---
 
 ## `notifications`
 
-Desktop notifications for run events (macOS and Linux via libnotify).
+Notification hooks for run events.
 
 ```yaml
 notifications:
-  enabled: true
-  on_run_complete: true
-  on_run_failed: true
-  on_budget_warning: true
-```
-
----
-
-## `token_filter`
-
-Control token filtering and compression applied to agent inputs to reduce cost.
-
-```yaml
-token_filter:
-  enabled: true
-  compression_level: 1    # 0 = off, 1 = light, 2 = aggressive
-  redact_secrets: true
-```
-
----
-
-## `retry`
-
-Configure retry behavior for failed agent sessions.
-
-```yaml
-retry:
-  max_attempts: 2
-  initial_delay_secs: 5
-  backoff_multiplier: 2.0
-  max_delay_secs: 60
-```
-
----
-
-## `db`
-
-SQLite database configuration.
-
-```yaml
-db:
-  path: ".grove/grove.db"          # Path to the database file
-  wal_checkpoint_interval_secs: 30 # WAL checkpoint interval
-  max_connections: 4               # Connection pool size
+  defaults:
+    on_failure: []
+    on_success: []
 ```
 
 ---
@@ -389,16 +432,3 @@ Some settings can be overridden with environment variables:
 | `GROVE_NO_COLOR` | Disable color output |
 | `ANTHROPIC_API_KEY` | Anthropic API key (alternative to `grove auth set`) |
 | `OPENAI_API_KEY` | OpenAI API key |
-
----
-
-## Configuration lookup order
-
-Grove resolves configuration in this order (later values override earlier ones):
-
-1. Built-in defaults
-2. `.grove/grove.yaml` in the project root
-3. Environment variables
-4. Command-line flags
-
-This means you can set a project-wide budget in `grove.yaml` and override it for a single run with `--budget-usd`.

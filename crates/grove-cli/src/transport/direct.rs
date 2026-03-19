@@ -24,7 +24,6 @@ impl Transport for DirectTransport {
         grove_core::orchestrator::list_runs(&self.project, limit).map_err(CliError::Core)
     }
 
-    // Stubs — will be filled in Tasks 7–15
     fn list_tasks(&self) -> CliResult<Vec<grove_core::orchestrator::TaskRecord>> {
         grove_core::orchestrator::list_tasks(&self.project).map_err(CliError::Core)
     }
@@ -366,7 +365,6 @@ impl Transport for DirectTransport {
     }
 
     fn select_llm(&self, provider: &str, model: Option<&str>) -> CliResult<()> {
-        // Validate the provider string first.
         LlmProviderKind::from_str(provider)
             .ok_or_else(|| CliError::BadArg(format!("unknown provider: {provider}")))?;
         let project =
@@ -374,13 +372,9 @@ impl Transport for DirectTransport {
         let mut settings =
             grove_core::orchestrator::get_project_settings(&self.project, &project.id)
                 .map_err(CliError::Core)?;
-        settings.default_provider = Some(provider.to_string());
+        settings.default_llm_provider = Some(provider.to_string());
         if let Some(m) = model {
-            // ProjectSettings may not have a default_model field; store it as
-            // part of the pipeline override using an env-like convention.
-            // For now, store via the provider field only — model selection
-            // requires an explicit API in grove-core (not yet exposed).
-            let _ = m;
+            settings.default_llm_model = Some(m.to_string());
         }
         grove_core::orchestrator::update_project_settings(&self.project, &project.id, &settings)
             .map_err(CliError::Core)

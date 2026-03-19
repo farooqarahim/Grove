@@ -13,10 +13,10 @@ use crate::error::CliResult;
 // grove_core::db::repositories::projects_repo::ProjectRow
 // grove_core::db::repositories::conversations_repo::ConversationRow
 //
-// Transport trait growth: each task (8–15) ADDS mutation methods AND updates:
-//   1. DirectTransport impl   — real grove-core call
-//   2. SocketTransport impl   — socket stub (Err for now)
-//   3. TestTransport impl     — Ok(default) or Err as appropriate
+// Transport trait: each method is implemented by:
+//   1. DirectTransport   — in-process grove-core call
+//   2. SocketTransport   — JSON-RPC over Unix domain socket
+//   3. TestTransport     — test double (#[cfg(test)] only)
 
 /// Parameters for the `run` command — queues a task and returns its initial state.
 pub struct StartRunRequest {
