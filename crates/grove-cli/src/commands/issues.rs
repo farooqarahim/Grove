@@ -874,25 +874,25 @@ mod tests {
 
     #[test]
     fn issue_list_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(false, &t, &text_mode()).is_ok());
     }
 
     #[test]
     fn issue_list_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(false, &t, &OutputMode::Json).is_ok());
     }
 
     #[test]
     fn issue_list_cached_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(true, &t, &text_mode()).is_ok());
     }
 
     #[test]
     fn issue_show_null_returns_not_found() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = show_cmd("GH-1", &t, &text_mode());
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -901,58 +901,58 @@ mod tests {
 
     #[test]
     fn issue_show_null_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         // JSON mode prints null without error
         assert!(show_cmd("GH-1", &t, &OutputMode::Json).is_ok());
     }
 
     #[test]
     fn issue_create_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = create_cmd("Bug", None, vec![], None, &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_close_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = close_cmd("GH-1", &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_board_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(board_cmd(None, None, None, None, &t, &text_mode()).is_ok());
     }
 
     #[test]
     fn issue_board_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(board_cmd(None, None, None, None, &t, &OutputMode::Json).is_ok());
     }
 
     #[test]
     fn issue_sync_null_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(sync_cmd(None, false, &t, &text_mode()).is_ok());
     }
 
     #[test]
     fn issue_sync_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(sync_cmd(None, true, &t, &OutputMode::Json).is_ok());
     }
 
     #[test]
     fn issue_search_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(search_cmd("bug", 10, None, &t, &text_mode()).is_ok());
     }
 
     #[test]
     fn issue_search_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(search_cmd("bug", 10, None, &t, &OutputMode::Json).is_ok());
     }
 
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn issue_board_with_status_filter_ok() {
         // Verify board_cmd with a status filter does not panic even when groups are empty.
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(board_cmd(Some("open"), None, None, None, &t, &text_mode()).is_ok());
     }
 
@@ -979,19 +979,19 @@ mod tests {
 
     #[test]
     fn connect_status_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(connect_status_cmd(&t, &OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn connect_status_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(connect_status_cmd(&t, &OutputMode::Json).is_ok());
     }
 
     #[test]
     fn issue_update_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = update_cmd(
             "GH-1",
             Some("new title"),
@@ -1007,54 +1007,54 @@ mod tests {
 
     #[test]
     fn issue_comment_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = comment_cmd("GH-1", "looks good", &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_assign_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = assign_cmd("GH-1", "alice", &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_move_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = move_cmd("GH-1", "in_progress", &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_reopen_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = reopen_cmd("GH-1", &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_activity_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(activity_cmd("GH-1", &t, &text_mode()).is_ok());
     }
 
     #[test]
     fn issue_activity_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(activity_cmd("GH-1", &t, &OutputMode::Json).is_ok());
     }
 
     #[test]
     fn issue_push_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = push_cmd("GH-1", "linear", &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn issue_ready_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = ready_cmd("GH-1", &t, &text_mode());
         assert!(result.is_err());
     }
@@ -1089,14 +1089,14 @@ mod tests {
 
     #[test]
     fn connect_provider_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = connect_provider_cmd("github", Some("tok"), None, None, &t, &text_mode());
         assert!(result.is_err());
     }
 
     #[test]
     fn connect_disconnect_returns_err() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = connect_disconnect_cmd("github", &t, &text_mode());
         assert!(result.is_err());
     }
@@ -1104,7 +1104,7 @@ mod tests {
     #[test]
     fn fix_cmd_returns_err_when_run_fails() {
         use crate::cli::FixArgs;
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let a = FixArgs {
             issue_id: Some("GH-1".into()),
             prompt: None,
@@ -1119,7 +1119,7 @@ mod tests {
     #[test]
     fn lint_cmd_returns_err() {
         use crate::cli::LintArgs;
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let a = LintArgs {
             fix: false,
             model: None,
@@ -1130,7 +1130,7 @@ mod tests {
     #[test]
     fn ci_cmd_returns_err() {
         use crate::cli::CiArgs;
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let a = CiArgs {
             branch: None,
             wait: false,

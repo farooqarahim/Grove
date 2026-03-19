@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn signal_list_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             list_cmd(
                 "run-abc",
@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn signal_check_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             check_cmd(
                 "run-abc",
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn signal_list_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd("run-abc", t, crate::output::OutputMode::Json).is_ok());
     }
 }

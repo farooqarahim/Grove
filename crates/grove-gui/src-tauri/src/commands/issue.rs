@@ -703,7 +703,7 @@ pub async fn issue_comment_add(
             .map_err(|e| e.to_string())?;
         comments
             .into_iter()
-            .last()
+            .next_back()
             .ok_or_else(|| "comment insert succeeded but row not found".to_string())
     })
     .await
@@ -1089,6 +1089,7 @@ pub async fn push_issue_to_provider(
 
 /// Create a new issue on an external provider in the specified project, then
 /// store it locally so it appears on the board immediately.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn issue_create_on_provider(
     state: State<'_, AppState>,

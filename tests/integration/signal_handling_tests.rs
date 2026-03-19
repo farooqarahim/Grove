@@ -605,7 +605,7 @@ fn signal_concurrent_sends_all_persisted() {
 
     // Insert run on the main thread.
     {
-        let conn = db::DbHandle::new(&*db_path).connect().unwrap();
+        let conn = db::DbHandle::new(&db_path).connect().unwrap();
         insert_run(&conn, run_id);
     }
 
@@ -618,7 +618,7 @@ fn signal_concurrent_sends_all_persisted() {
             let path = Arc::clone(&db_path);
             let errs = Arc::clone(&errors);
             thread::spawn(move || {
-                let conn = db::DbHandle::new(&*path).connect().unwrap();
+                let conn = db::DbHandle::new(&path).connect().unwrap();
                 for i in 0..signals_per_thread {
                     let from = format!("producer_{t}");
                     let result = signals::send_signal(
@@ -649,7 +649,7 @@ fn signal_concurrent_sends_all_persisted() {
     );
 
     // Verify all signals landed.
-    let conn = db::DbHandle::new(&*db_path).connect().unwrap();
+    let conn = db::DbHandle::new(&db_path).connect().unwrap();
     let all = signals::check_signals(&conn, run_id, "consumer").unwrap();
     assert_eq!(
         all.len(),

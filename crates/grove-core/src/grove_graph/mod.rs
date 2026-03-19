@@ -561,9 +561,11 @@ mod tests {
 
     #[test]
     fn graph_config_to_pairs_round_trip() {
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
-        config.platform_mobile = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            platform_mobile: true,
+            ..Default::default()
+        };
         let pairs: Vec<(String, String)> = config
             .to_config_pairs()
             .into_iter()

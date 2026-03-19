@@ -779,8 +779,10 @@ mod tests {
 
     #[test]
     fn required_docs_includes_prd_when_flagged() {
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            ..Default::default()
+        };
         let docs = required_docs(&config);
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].label, "PRD");
@@ -789,10 +791,12 @@ mod tests {
 
     #[test]
     fn required_docs_includes_all_when_all_flagged() {
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
-        config.doc_system_design = true;
-        config.doc_guidelines = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            doc_system_design: true,
+            doc_guidelines: true,
+            ..Default::default()
+        };
         let docs = required_docs(&config);
         assert_eq!(docs.len(), 3);
     }
@@ -800,9 +804,11 @@ mod tests {
     #[test]
     fn find_missing_docs_returns_missing() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
-        config.doc_system_design = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            doc_system_design: true,
+            ..Default::default()
+        };
         let docs = required_docs(&config);
 
         // Neither doc exists.
@@ -819,8 +825,10 @@ mod tests {
     #[test]
     fn find_missing_docs_returns_empty_when_all_present() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            ..Default::default()
+        };
         let docs = required_docs(&config);
 
         std::fs::write(tmp.path().join("PRD.md"), "# PRD").unwrap();
@@ -873,8 +881,10 @@ mod tests {
         seed_conversation(&conn, "conv1");
         let graph_id = grove_graph_repo::insert_graph(&conn, "conv1", "G", "desc", None).unwrap();
 
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            ..Default::default()
+        };
         grove_graph_repo::set_graph_config(&conn, &graph_id, &config).unwrap();
 
         let tmp = tempfile::TempDir::new().unwrap();
@@ -895,8 +905,10 @@ mod tests {
         seed_conversation(&conn, "conv1");
         let graph_id = grove_graph_repo::insert_graph(&conn, "conv1", "G", "desc", None).unwrap();
 
-        let mut config = GraphConfig::default();
-        config.doc_prd = true;
+        let config = GraphConfig {
+            doc_prd: true,
+            ..Default::default()
+        };
         grove_graph_repo::set_graph_config(&conn, &graph_id, &config).unwrap();
 
         let tmp = tempfile::TempDir::new().unwrap();

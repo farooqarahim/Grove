@@ -209,6 +209,7 @@ pub fn create_graph(
 /// activate it, then spawn pre-planning + graph creation in the background.
 /// Returns immediately with the initial graph detail so the frontend can show
 /// the graph in a "planning" state while the pipeline runs asynchronously.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_graph_from_spec(
     state: State<'_, AppState>,
@@ -876,6 +877,7 @@ pub fn delete_graph(state: State<'_, AppState>, graph_id: String) -> Result<(), 
 
 // -- Phase CRUD --
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn create_graph_phase(
     state: State<'_, AppState>,
@@ -954,6 +956,7 @@ pub fn delete_graph_phase(state: State<'_, AppState>, phase_id: String) -> Resul
 
 // -- Step CRUD --
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn create_graph_step(
     state: State<'_, AppState>,
@@ -1320,7 +1323,6 @@ pub fn get_graph_git_status(
 
 // -- Loop Control Commands --
 
-/// Start the agentic loop for a graph. Validates parsing_status == 'complete',
 // ── Readiness Check & Clarifications ─────────────────────────────────────────
 
 /// Run a readiness check for a graph. Returns either `Ready` or

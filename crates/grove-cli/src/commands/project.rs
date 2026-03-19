@@ -470,25 +470,25 @@ mod tests {
 
     #[test]
     fn project_list_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(t, crate::output::OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn project_list_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(t, crate::output::OutputMode::Json).is_ok());
     }
 
     #[test]
     fn project_show_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(show_cmd(t, crate::output::OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn project_set_name_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = set_name_cmd(
             ProjectSetNameArgs {
                 name: "my-proj".into(),
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn project_archive_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = archive_cmd(
             ProjectArchiveArgs { id: None },
             t,
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn project_delete_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = delete_cmd(
             ProjectDeleteArgs { id: None },
             t,

@@ -113,6 +113,7 @@ impl Drop for PtyManager {
 /// The `pty_id` format is `"{conversation_id}:{tab_index}"`.
 /// - Tab 0 = agent tab (auto-resolves CLI from conversation)
 /// - Tab 1+ = shell tab (uses provided config)
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn pty_open(
     state: State<'_, AppState>,

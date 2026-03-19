@@ -91,6 +91,39 @@ pub fn detect_ghost_sessions(conn: &Connection) -> GroveResult<usize> {
     Ok(recovered)
 }
 
+/// Delete `grove/*` branches whose worktree directory no longer exists.
+///
+/// Called after worktree cleanup to catch branches left behind by crashes
+/// or incomplete cleanup. Branches are batch-deleted in a single `git branch -D` call.
+pub fn cleanup_orphaned_branches(project_root: &Path) {
+    let branches = git_ops::git_list_branches(project_root, "grove/*");
+    if branches.is_empty() {
+        return;
+    }
+
+    let worktrees_dir = project_root.join(".grove").join("worktrees");
+    let orphaned: Vec<&str> = branches
+        .iter()
+        .filter(|branch| {
+            let session_part = branch.strip_prefix("grove/").unwrap_or(branch);
+            !worktrees_dir.join(session_part).exists()
+        })
+        .map(|s| s.as_str())
+        .collect();
+
+    if orphaned.is_empty() {
+        return;
+    }
+
+    // Batch delete: `git branch -D branch1 branch2 ...`
+    let mut args = vec!["branch", "-D"];
+    args.extend(orphaned.iter());
+    let _ = std::process::Command::new("git")
+        .args(&args)
+        .current_dir(project_root)
+        .output();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,37 +228,4 @@ mod tests {
         let recovered = detect_ghost_sessions(&conn).unwrap();
         assert_eq!(recovered, 0, "terminal sessions must not be re-processed");
     }
-}
-
-/// Delete `grove/*` branches whose worktree directory no longer exists.
-///
-/// Called after worktree cleanup to catch branches left behind by crashes
-/// or incomplete cleanup. Branches are batch-deleted in a single `git branch -D` call.
-pub fn cleanup_orphaned_branches(project_root: &Path) {
-    let branches = git_ops::git_list_branches(project_root, "grove/*");
-    if branches.is_empty() {
-        return;
-    }
-
-    let worktrees_dir = project_root.join(".grove").join("worktrees");
-    let orphaned: Vec<&str> = branches
-        .iter()
-        .filter(|branch| {
-            let session_part = branch.strip_prefix("grove/").unwrap_or(branch);
-            !worktrees_dir.join(session_part).exists()
-        })
-        .map(|s| s.as_str())
-        .collect();
-
-    if orphaned.is_empty() {
-        return;
-    }
-
-    // Batch delete: `git branch -D branch1 branch2 ...`
-    let mut args = vec!["branch", "-D"];
-    args.extend(orphaned.iter());
-    let _ = std::process::Command::new("git")
-        .args(&args)
-        .current_dir(project_root)
-        .output();
 }

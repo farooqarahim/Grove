@@ -192,19 +192,19 @@ mod tests {
 
     #[test]
     fn llm_list_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(t, crate::output::OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn llm_list_json_mode_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(t, crate::output::OutputMode::Json).is_ok());
     }
 
     #[test]
     fn llm_models_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = models_cmd(
             LlmModelsArgs {
                 provider: "anthropic".into(),
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn llm_models_json_mode_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = models_cmd(
             LlmModelsArgs {
                 provider: "anthropic".into(),
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn llm_select_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = select_cmd(
             LlmSelectArgs {
                 provider: "anthropic".into(),

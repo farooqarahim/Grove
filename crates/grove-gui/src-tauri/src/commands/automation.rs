@@ -5,6 +5,7 @@ use crate::state::AppState;
 
 // ── Automations ──────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn create_automation(
     state: State<'_, AppState>,
@@ -81,6 +82,7 @@ pub fn get_automation(
         .map_err(|e| e.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn update_automation(
     state: State<'_, AppState>,
@@ -189,6 +191,7 @@ pub fn list_automation_steps(
         .map_err(|e| e.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn add_automation_step(
     state: State<'_, AppState>,
@@ -242,6 +245,7 @@ pub fn add_automation_step(
     Ok(step)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn update_automation_step(
     state: State<'_, AppState>,

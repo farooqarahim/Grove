@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn conversation_list_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             list_cmd(
                 ConversationListArgs { limit: 20 },
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn conversation_list_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             list_cmd(
                 ConversationListArgs { limit: 20 },
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn conversation_show_ok_when_not_found() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             show_cmd(
                 ConversationShowArgs {
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn conversation_archive_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = archive_cmd(
             ConversationArchiveArgs {
                 id: "conv_1".into(),
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn conversation_delete_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = delete_cmd(
             ConversationDeleteArgs {
                 id: "conv_1".into(),
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn conversation_rebase_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = rebase_cmd(
             ConversationRebaseArgs {
                 id: "conv_1".into(),
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn conversation_merge_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = merge_cmd(
             ConversationMergeArgs {
                 id: "conv_1".into(),

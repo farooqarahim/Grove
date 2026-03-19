@@ -979,7 +979,7 @@ mod tests {
 
     #[test]
     fn loop_iteration_result_variants_are_distinct() {
-        let variants = vec![
+        let variants = [
             LoopIterationResult::Continue,
             LoopIterationResult::GraphComplete,
             LoopIterationResult::Paused,

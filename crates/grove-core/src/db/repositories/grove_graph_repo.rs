@@ -1904,10 +1904,12 @@ mod tests {
         seed_conversation(&conn, "conv1");
         let gid = insert_graph(&conn, "conv1", "G", "d", None).unwrap();
 
-        let mut cfg = GraphConfig::default();
-        cfg.doc_prd = true;
-        cfg.platform_frontend = true;
-        cfg.arch_saas = true;
+        let cfg = GraphConfig {
+            doc_prd: true,
+            platform_frontend: true,
+            arch_saas: true,
+            ..Default::default()
+        };
 
         set_graph_config(&conn, &gid, &cfg).unwrap();
         let loaded = get_graph_config(&conn, &gid).unwrap();
@@ -1924,13 +1926,17 @@ mod tests {
         seed_conversation(&conn, "conv1");
         let gid = insert_graph(&conn, "conv1", "G", "d", None).unwrap();
 
-        let mut cfg = GraphConfig::default();
-        cfg.doc_prd = true;
+        let cfg = GraphConfig {
+            doc_prd: true,
+            ..Default::default()
+        };
         set_graph_config(&conn, &gid, &cfg).unwrap();
 
         // Now flip doc_prd off and enable another
-        cfg.doc_prd = false;
-        cfg.arch_dlib = true;
+        let cfg = GraphConfig {
+            arch_dlib: true,
+            ..Default::default()
+        };
         set_graph_config(&conn, &gid, &cfg).unwrap();
 
         let loaded = get_graph_config(&conn, &gid).unwrap();

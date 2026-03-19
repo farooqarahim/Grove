@@ -70,14 +70,14 @@ mod tests {
             yes: false,
             force: false,
         };
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(cleanup_cmd(args, t, OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn gc_cmd_ok() {
         let args = GcArgs { dry_run: true };
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(gc_cmd(args, t, OutputMode::Text { no_color: true }).is_ok());
     }
 
@@ -90,7 +90,7 @@ mod tests {
             yes: true,
             force: false,
         };
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(cleanup_cmd(args, t, OutputMode::Json).is_ok());
     }
 }

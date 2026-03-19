@@ -149,7 +149,7 @@ mod tests {
     fn run_watch_without_tui_feature_returns_error() {
         #[cfg(not(feature = "tui"))]
         {
-            let t = GroveTransport::Test(TestTransport::default());
+            let t = GroveTransport::Test(TestTransport);
             let result = run_cmd(
                 crate::cli::RunArgs {
                     objective: "test".into(),
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn tasks_cmd_with_empty_transport_renders_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = tasks_cmd(
             crate::cli::TasksArgs {
                 limit: 10,
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn tasks_cmd_json_mode_renders_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = tasks_cmd(
             crate::cli::TasksArgs {
                 limit: 10,
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn task_cancel_cmd_returns_not_implemented_for_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = task_cancel_cmd(
             crate::cli::TaskCancelArgs {
                 task_id: "abc123".into(),

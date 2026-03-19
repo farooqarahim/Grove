@@ -126,21 +126,21 @@ mod tests {
 
     #[test]
     fn auth_list_with_test_transport_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = list_cmd(t, crate::output::OutputMode::Text { no_color: true });
         assert!(result.is_ok());
     }
 
     #[test]
     fn auth_list_json_mode_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = list_cmd(t, crate::output::OutputMode::Json);
         assert!(result.is_ok());
     }
 
     #[test]
     fn auth_set_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = set_cmd(
             AuthSetArgs {
                 provider: "anthropic".into(),
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn auth_remove_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = remove_cmd(
             AuthRemoveArgs {
                 provider: "anthropic".into(),

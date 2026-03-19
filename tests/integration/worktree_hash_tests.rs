@@ -1360,7 +1360,7 @@ fn matches_sparse_patterns_directory_and_file() {
     assert!(matches_sparse_patterns("yarn.lock", &patterns));
     assert!(!matches_sparse_patterns(
         "Cargo.toml",
-        &vec!["*.lock".to_string()]
+        &["*.lock".to_string()]
     ));
 }
 
