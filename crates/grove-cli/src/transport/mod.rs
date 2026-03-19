@@ -67,13 +67,13 @@ pub trait Transport {
         title: &str,
         body: Option<&str>,
         labels: Vec<String>,
-        priority: Option<&str>,
+        priority: Option<i64>,
     ) -> CliResult<serde_json::Value>;
     fn close_issue(&self, id: &str) -> CliResult<()>;
     fn search_issues(
         &self,
         query: &str,
-        limit: u32,
+        limit: i64,
         provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>>;
     fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value>;
@@ -215,7 +215,7 @@ impl Transport for GroveTransport {
         title: &str,
         body: Option<&str>,
         labels: Vec<String>,
-        priority: Option<&str>,
+        priority: Option<i64>,
     ) -> CliResult<serde_json::Value> {
         match self {
             GroveTransport::Direct(t) => t.create_issue(title, body, labels, priority),
@@ -237,7 +237,7 @@ impl Transport for GroveTransport {
     fn search_issues(
         &self,
         query: &str,
-        limit: u32,
+        limit: i64,
         provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>> {
         match self {
@@ -478,7 +478,7 @@ impl Transport for TestTransport {
         _title: &str,
         _body: Option<&str>,
         _labels: Vec<String>,
-        _priority: Option<&str>,
+        _priority: Option<i64>,
     ) -> CliResult<serde_json::Value> {
         Err(CliError::Other("not implemented".into()))
     }
@@ -490,7 +490,7 @@ impl Transport for TestTransport {
     fn search_issues(
         &self,
         _query: &str,
-        _limit: u32,
+        _limit: i64,
         _provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>> {
         Ok(vec![])

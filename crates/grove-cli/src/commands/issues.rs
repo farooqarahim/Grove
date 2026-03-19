@@ -105,7 +105,7 @@ pub fn create_cmd(
     title: &str,
     body: Option<&str>,
     labels: Vec<String>,
-    priority: Option<&str>,
+    priority: Option<i64>,
     transport: &GroveTransport,
     mode: &OutputMode,
 ) -> CliResult<()> {
@@ -359,7 +359,7 @@ pub fn sync_cmd(
 
 pub fn search_cmd(
     query: &str,
-    limit: u32,
+    limit: i64,
     provider: Option<&str>,
     transport: &GroveTransport,
     mode: &OutputMode,
@@ -394,7 +394,10 @@ pub fn dispatch(a: IssueArgs, t: GroveTransport, m: OutputMode) -> CliResult<()>
             body,
             labels,
             priority,
-        } => create_cmd(&title, body.as_deref(), labels, priority.as_deref(), &t, &m),
+        } => {
+            let p = priority.and_then(|s| s.parse::<i64>().ok());
+            create_cmd(&title, body.as_deref(), labels, p, &t, &m)
+        }
         IssueAction::Close { id } => close_cmd(&id, &t, &m),
         IssueAction::Board {
             status,
@@ -414,7 +417,7 @@ pub fn dispatch(a: IssueArgs, t: GroveTransport, m: OutputMode) -> CliResult<()>
             query,
             limit,
             provider,
-        } => search_cmd(&query, limit, provider.as_deref(), &t, &m),
+        } => search_cmd(&query, limit as i64, provider.as_deref(), &t, &m),
         // Remaining actions handled in Task 13
         _ => Ok(()),
     }
