@@ -91,9 +91,9 @@ fn render_signals(signals: Vec<serde_json::Value>, mode: OutputMode) -> CliResul
                             .unwrap_or("")
                             .to_string(),
                         s.get("priority")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
+                            .and_then(|v| v.as_i64())
+                            .map(|n| n.to_string())
+                            .unwrap_or_default(),
                         s.get("created_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or("")

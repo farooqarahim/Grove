@@ -8,7 +8,13 @@ pub fn cleanup_cmd(
     transport: GroveTransport,
     mode: OutputMode,
 ) -> CliResult<()> {
-    let result = transport.run_cleanup(args.project, args.conversation, args.dry_run)?;
+    let result = transport.run_cleanup(
+        args.project,
+        args.conversation,
+        args.dry_run,
+        args.yes,
+        args.force,
+    )?;
     match mode {
         OutputMode::Json => {
             println!("{}", json_out::emit_json(&result));

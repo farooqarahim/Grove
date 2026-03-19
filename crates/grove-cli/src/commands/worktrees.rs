@@ -27,7 +27,7 @@ pub fn dispatch_cmd(
                 return Ok(());
             }
         }
-        return delete_all_cmd(false, transport, mode);
+        return delete_all_cmd(transport, mode);
     }
     list_cmd(transport, mode)
 }
@@ -128,8 +128,8 @@ fn delete_cmd(id: &str, transport: GroveTransport, mode: OutputMode) -> CliResul
     Ok(())
 }
 
-fn delete_all_cmd(force: bool, transport: GroveTransport, mode: OutputMode) -> CliResult<()> {
-    let result = transport.delete_all_worktrees(force)?;
+fn delete_all_cmd(transport: GroveTransport, mode: OutputMode) -> CliResult<()> {
+    let result = transport.delete_all_worktrees()?;
     match mode {
         OutputMode::Json => {
             println!("{}", json_out::emit_json(&result));

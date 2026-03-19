@@ -204,7 +204,7 @@ pub trait Transport {
     fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>>;
     fn clean_worktrees(&self) -> CliResult<serde_json::Value>;
     fn delete_worktree(&self, id: &str) -> CliResult<()>;
-    fn delete_all_worktrees(&self, force: bool) -> CliResult<serde_json::Value>;
+    fn delete_all_worktrees(&self) -> CliResult<serde_json::Value>;
 
     // ── Task 15 cleanup/gc methods ────────────────────────────────────────────
     fn run_cleanup(
@@ -212,6 +212,8 @@ pub trait Transport {
         project: bool,
         conversation: bool,
         dry_run: bool,
+        yes: bool,
+        force: bool,
     ) -> CliResult<serde_json::Value>;
     fn run_gc(&self, dry_run: bool) -> CliResult<serde_json::Value>;
 }
@@ -903,12 +905,12 @@ impl Transport for GroveTransport {
         }
     }
 
-    fn delete_all_worktrees(&self, force: bool) -> CliResult<serde_json::Value> {
+    fn delete_all_worktrees(&self) -> CliResult<serde_json::Value> {
         match self {
-            GroveTransport::Direct(t) => t.delete_all_worktrees(force),
-            GroveTransport::Socket(t) => t.delete_all_worktrees(force),
+            GroveTransport::Direct(t) => t.delete_all_worktrees(),
+            GroveTransport::Socket(t) => t.delete_all_worktrees(),
             #[cfg(test)]
-            GroveTransport::Test(t) => t.delete_all_worktrees(force),
+            GroveTransport::Test(t) => t.delete_all_worktrees(),
         }
     }
 
@@ -917,12 +919,14 @@ impl Transport for GroveTransport {
         project: bool,
         conversation: bool,
         dry_run: bool,
+        yes: bool,
+        force: bool,
     ) -> CliResult<serde_json::Value> {
         match self {
-            GroveTransport::Direct(t) => t.run_cleanup(project, conversation, dry_run),
-            GroveTransport::Socket(t) => t.run_cleanup(project, conversation, dry_run),
+            GroveTransport::Direct(t) => t.run_cleanup(project, conversation, dry_run, yes, force),
+            GroveTransport::Socket(t) => t.run_cleanup(project, conversation, dry_run, yes, force),
             #[cfg(test)]
-            GroveTransport::Test(t) => t.run_cleanup(project, conversation, dry_run),
+            GroveTransport::Test(t) => t.run_cleanup(project, conversation, dry_run, yes, force),
         }
     }
 
@@ -1257,7 +1261,7 @@ impl Transport for TestTransport {
         Err(CliError::Other("not implemented".into()))
     }
 
-    fn delete_all_worktrees(&self, _force: bool) -> CliResult<serde_json::Value> {
+    fn delete_all_worktrees(&self) -> CliResult<serde_json::Value> {
         Err(CliError::Other("not implemented".into()))
     }
 
@@ -1266,6 +1270,8 @@ impl Transport for TestTransport {
         _project: bool,
         _conversation: bool,
         _dry_run: bool,
+        _yes: bool,
+        _force: bool,
     ) -> CliResult<serde_json::Value> {
         Ok(serde_json::Value::Null)
     }

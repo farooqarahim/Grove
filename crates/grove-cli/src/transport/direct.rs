@@ -530,7 +530,7 @@ impl Transport for DirectTransport {
         Err(CliError::Other("not yet available".into()))
     }
 
-    fn delete_all_worktrees(&self, _force: bool) -> CliResult<serde_json::Value> {
+    fn delete_all_worktrees(&self) -> CliResult<serde_json::Value> {
         Err(CliError::Other("not yet available".into()))
     }
 
@@ -541,6 +541,8 @@ impl Transport for DirectTransport {
         _project: bool,
         _conversation: bool,
         _dry_run: bool,
+        _yes: bool,
+        _force: bool,
     ) -> CliResult<serde_json::Value> {
         Err(CliError::Other("not yet available".into()))
     }
