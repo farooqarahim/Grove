@@ -41,6 +41,7 @@ pub struct RunWatchState {
     pub last_refresh: Instant,
     pub scroll_offset: u16,
     pub done: bool,
+    pub last_error: Option<String>,
 }
 
 #[cfg(feature = "tui")]
@@ -55,33 +56,8 @@ impl RunWatchState {
             last_refresh: Instant::now(),
             scroll_offset: 0,
             done: false,
+            last_error: None,
         }
-    }
-
-    /// Refresh state from transport. Silently swallows errors so the UI stays alive.
-    pub fn refresh(&mut self, transport: &GroveTransport) {
-        // Refresh run record for agent list
-        if let Ok(Some(run)) = transport.get_run(&self.run_id) {
-            // Synthesise a single-row agent entry from current_agent if present.
-            self.agents.clear();
-            if let Some(agent) = &run.current_agent {
-                self.agents.push(AgentRow {
-                    name: agent.clone(),
-                    state: run.state.clone(),
-                    started: None,
-                });
-            }
-        }
-
-        // Refresh logs
-        if let Ok(logs) = transport.get_logs(&self.run_id, false) {
-            self.log_lines = logs
-                .iter()
-                .filter_map(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
-                .collect();
-        }
-
-        self.last_refresh = Instant::now();
     }
 
     pub fn select_next(&mut self) {
@@ -122,9 +98,33 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
 
     let result = (|| -> crate::error::CliResult<()> {
         loop {
+            // Single get_run call per iteration — used for both the agent-table
+            // refresh and the terminal-state check below.
+            let current_run = transport.get_run(&run_id).ok().flatten();
+
             // Refresh data on interval
             if state.last_refresh.elapsed() >= poll_interval {
-                state.refresh(&transport);
+                // Update agent list from the already-fetched run record.
+                if let Some(ref run) = current_run {
+                    state.agents.clear();
+                    if let Some(agent) = &run.current_agent {
+                        state.agents.push(AgentRow {
+                            name: agent.clone(),
+                            state: run.state.clone(),
+                            started: None,
+                        });
+                    }
+                }
+
+                // Refresh logs
+                if let Ok(logs) = transport.get_logs(&state.run_id, false) {
+                    state.log_lines = logs
+                        .iter()
+                        .filter_map(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
+                        .collect();
+                }
+
+                state.last_refresh = Instant::now();
             }
 
             // Sync table selection
@@ -144,7 +144,9 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                         (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => break,
                         (KeyCode::Char('c'), KeyModifiers::CONTROL) => break,
                         (KeyCode::Char('a'), _) => {
-                            transport.abort_run(&run_id).ok();
+                            if let Err(e) = transport.abort_run(&run_id) {
+                                state.last_error = Some(e.to_string());
+                            }
                         }
                         (KeyCode::Tab, _) if !state.agents.is_empty() => {
                             state.selected_agent = (state.selected_agent + 1) % state.agents.len();
@@ -153,7 +155,9 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                             state.scroll_offset = state.scroll_offset.saturating_sub(1);
                         }
                         (KeyCode::Down, _) => {
-                            state.scroll_offset = state.scroll_offset.saturating_add(1);
+                            let max_scroll = state.log_lines.len().saturating_sub(1) as u16;
+                            state.scroll_offset =
+                                state.scroll_offset.saturating_add(1).min(max_scroll);
                         }
                         (KeyCode::Char('j'), _) => state.select_next(),
                         (KeyCode::Char('k'), _) => state.select_prev(),
@@ -165,8 +169,9 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                 }
             }
 
-            // Exit automatically when run is terminal
-            if let Ok(Some(run)) = transport.get_run(&state.run_id) {
+            // Exit automatically when run reaches a terminal state.
+            // Re-uses the run record fetched at the top of this iteration.
+            if let Some(run) = current_run {
                 let terminal_states = ["completed", "failed", "aborted"];
                 if terminal_states.contains(&run.state.as_str()) {
                     state.done = true;
@@ -199,16 +204,27 @@ fn draw(f: &mut Frame<'_>, state: &mut RunWatchState, table_state: &mut TableSta
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
-    // Split into top (objective banner) + body
+    // Split into top (objective banner) + body + error bar (always 1 line, blank when no error)
     let vert = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     // Objective line
     let obj_text = ratatui::widgets::Paragraph::new(format!("  {}", state.objective))
         .style(Style::default().fg(Color::White));
     f.render_widget(obj_text, vert[0]);
+
+    // Error bar (bottom slot — always reserved, left blank when no error)
+    if let Some(ref err) = state.last_error {
+        let err_para = ratatui::widgets::Paragraph::new(format!("Error: {err}"))
+            .style(Style::default().fg(Color::Red));
+        f.render_widget(err_para, vert[2]);
+    }
 
     // Split body into agents (left) + logs (right)
     let horiz = Layout::default()
