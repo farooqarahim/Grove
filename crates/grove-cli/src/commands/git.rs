@@ -531,7 +531,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let result = status_cmd(dir.path(), OutputMode::Text { no_color: true });
         // Non-git directory must return Err, not panic.
-        let _ = result;
+        assert!(
+            result.is_err(),
+            "status on non-git dir should return Err, got Ok"
+        );
     }
 
     #[test]
