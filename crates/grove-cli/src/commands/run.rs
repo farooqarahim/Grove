@@ -33,7 +33,7 @@ pub fn run_cmd(args: RunArgs, transport: GroveTransport, mode: OutputMode) -> Cl
     // --watch: delegate to TUI run-watch (only with feature=tui)
     #[cfg(feature = "tui")]
     if args.watch {
-        return crate::tui::run_watch::run(result.run_id, result.objective.clone(), &transport);
+        return crate::tui::run_watch::run(result.run_id, transport);
     }
     #[cfg(not(feature = "tui"))]
     if args.watch {

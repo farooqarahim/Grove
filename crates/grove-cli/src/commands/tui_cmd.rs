@@ -1,4 +1,6 @@
+#[cfg(feature = "tui")]
 use crate::error::CliResult;
+#[cfg(feature = "tui")]
 use crate::transport::GroveTransport;
 
 #[cfg(feature = "tui")]
