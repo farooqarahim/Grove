@@ -1,0 +1,266 @@
+//! Live run-watch TUI pane — polls transport for run state and renders a
+//! two-panel view: agent table (left) + log tail (right).
+
+#[cfg(feature = "tui")]
+use std::time::{Duration, Instant};
+
+#[cfg(feature = "tui")]
+use crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+};
+#[cfg(feature = "tui")]
+use ratatui::{
+    Terminal,
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    prelude::*,
+    widgets::{Block, Borders, List, ListItem, Row, Table, TableState},
+};
+
+#[cfg(feature = "tui")]
+use crate::transport::{GroveTransport, Transport};
+
+/// View-model for the run-watch TUI.
+#[cfg(feature = "tui")]
+pub struct RunWatchState {
+    pub run_id: String,
+    pub objective: String,
+    /// (agent_id, agent_type, state)
+    pub agents: Vec<(String, String, String)>,
+    pub selected_agent: usize,
+    pub log_lines: Vec<String>,
+    pub last_refresh: Instant,
+}
+
+#[cfg(feature = "tui")]
+impl RunWatchState {
+    pub fn new(run_id: String, objective: String) -> Self {
+        Self {
+            run_id,
+            objective,
+            agents: Vec::new(),
+            selected_agent: 0,
+            log_lines: Vec::new(),
+            last_refresh: Instant::now(),
+        }
+    }
+
+    /// Refresh state from transport. Silently swallows errors so the UI stays alive.
+    pub fn refresh(&mut self, transport: &GroveTransport) {
+        // Refresh run record for agent list
+        if let Ok(Some(run)) = transport.get_run(&self.run_id) {
+            // Synthesise a single-row agent entry from current_agent if present.
+            self.agents.clear();
+            if let Some(agent) = &run.current_agent {
+                self.agents
+                    .push((agent.clone(), "agent".into(), run.state.clone()));
+            }
+        }
+
+        // Refresh logs
+        if let Ok(logs) = transport.get_logs(&self.run_id, false) {
+            self.log_lines = logs
+                .iter()
+                .filter_map(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
+                .collect();
+        }
+
+        self.last_refresh = Instant::now();
+    }
+
+    pub fn select_next(&mut self) {
+        if !self.agents.is_empty() {
+            self.selected_agent = (self.selected_agent + 1) % self.agents.len();
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if !self.agents.is_empty() {
+            self.selected_agent = self.selected_agent.saturating_sub(1);
+        }
+    }
+}
+
+/// Run the live run-watch loop for `run_id`.
+#[cfg(feature = "tui")]
+pub fn run(
+    run_id: String,
+    objective: String,
+    transport: &GroveTransport,
+) -> crate::error::CliResult<()> {
+    enable_raw_mode().map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen)
+        .map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal =
+        Terminal::new(backend).map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+
+    let mut state = RunWatchState::new(run_id, objective);
+    let poll_interval = Duration::from_secs(3);
+    let mut table_state = TableState::default();
+
+    let result = (|| -> crate::error::CliResult<()> {
+        loop {
+            // Refresh data on interval
+            if state.last_refresh.elapsed() >= poll_interval {
+                state.refresh(transport);
+            }
+
+            // Sync table selection
+            if state.agents.is_empty() {
+                table_state.select(None);
+            } else {
+                table_state.select(Some(state.selected_agent));
+            }
+
+            terminal
+                .draw(|f| draw(f, &mut state, &mut table_state))
+                .map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+
+            if event::poll(Duration::from_millis(200)).unwrap_or(false) {
+                if let Ok(Event::Key(key)) = event::read() {
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => break,
+                        KeyCode::Down | KeyCode::Char('j') => state.select_next(),
+                        KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
+                        KeyCode::Char('r') => {
+                            state.last_refresh = Instant::now() - poll_interval; // force refresh next loop
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // Exit automatically when run is terminal
+            if let Ok(Some(run)) = transport.get_run(&state.run_id) {
+                let terminal_states = ["completed", "failed", "paused"];
+                if terminal_states.contains(&run.state.as_str()) {
+                    // Give user a chance to see the final state
+                    std::thread::sleep(Duration::from_secs(2));
+                    break;
+                }
+            }
+        }
+        Ok(())
+    })();
+
+    disable_raw_mode().ok();
+    execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
+    terminal.show_cursor().ok();
+
+    result
+}
+
+/// Render function called every frame.
+#[cfg(feature = "tui")]
+fn draw(f: &mut Frame<'_>, state: &mut RunWatchState, table_state: &mut TableState) {
+    let area = f.size();
+
+    // Outer block with title
+    let outer = Block::default()
+        .title(format!(" grove watch — {} ", state.run_id))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(super::widgets::ACCENT));
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    // Split into top (objective banner) + body
+    let vert = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .split(inner);
+
+    // Objective line
+    let obj_text = ratatui::widgets::Paragraph::new(format!("  {}", state.objective))
+        .style(Style::default().fg(Color::White));
+    f.render_widget(obj_text, vert[0]);
+
+    // Split body into agents (left) + logs (right)
+    let horiz = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(vert[1]);
+
+    // Agent table
+    let rows: Vec<Row> = state
+        .agents
+        .iter()
+        .map(|(id, agent_type, st)| {
+            let color = super::widgets::state_color(st);
+            Row::new(vec![
+                id.as_str().to_string(),
+                agent_type.clone(),
+                st.clone(),
+            ])
+            .style(Style::default().fg(color))
+        })
+        .collect();
+
+    let widths = [
+        Constraint::Percentage(40),
+        Constraint::Percentage(30),
+        Constraint::Percentage(30),
+    ];
+    let agent_table = Table::new(rows, widths)
+        .header(
+            Row::new(vec!["Agent", "Type", "State"])
+                .style(Style::default().fg(super::widgets::ACCENT).bold()),
+        )
+        .block(super::widgets::titled_block("Agents"))
+        .highlight_style(Style::default().bg(Color::DarkGray));
+    f.render_stateful_widget(agent_table, horiz[0], table_state);
+
+    // Log panel
+    let visible_height = horiz[1].height.saturating_sub(2) as usize;
+    let skip = state.log_lines.len().saturating_sub(visible_height);
+    let items: Vec<ListItem> = state.log_lines[skip..]
+        .iter()
+        .map(|l| ListItem::new(l.as_str()))
+        .collect();
+    let log_list = List::new(items).block(super::widgets::titled_block("Logs"));
+    f.render_widget(log_list, horiz[1]);
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[cfg(feature = "tui")]
+    fn run_watch_state_initialises() {
+        let s = super::RunWatchState::new("run-abc123".into(), "add dark mode".into());
+        assert_eq!(s.run_id, "run-abc123");
+        assert!(s.agents.is_empty());
+        assert_eq!(s.selected_agent, 0);
+    }
+
+    #[test]
+    #[cfg(feature = "tui")]
+    fn run_watch_state_select_next_wraps() {
+        let mut s = super::RunWatchState::new("run-xyz".into(), "obj".into());
+        // With no agents, select_next is a no-op
+        s.select_next();
+        assert_eq!(s.selected_agent, 0);
+        // With agents, it wraps
+        s.agents = vec![
+            ("a1".into(), "planner".into(), "running".into()),
+            ("a2".into(), "coder".into(), "queued".into()),
+        ];
+        s.select_next();
+        assert_eq!(s.selected_agent, 1);
+        s.select_next();
+        assert_eq!(s.selected_agent, 0); // wrapped
+    }
+
+    #[test]
+    #[cfg(feature = "tui")]
+    fn run_watch_state_select_prev_saturates() {
+        let mut s = super::RunWatchState::new("run-xyz".into(), "obj".into());
+        s.agents = vec![("a1".into(), "planner".into(), "running".into())];
+        s.select_prev();
+        assert_eq!(s.selected_agent, 0); // saturating_sub
+    }
+}

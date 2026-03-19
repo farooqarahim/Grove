@@ -551,6 +551,12 @@ impl Transport for DirectTransport {
         Err(CliError::Other("not yet available".into()))
     }
 
+    fn get_run(&self, run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>> {
+        let runs =
+            grove_core::orchestrator::list_runs(&self.project, 1000).map_err(CliError::Core)?;
+        Ok(runs.into_iter().find(|r| r.id == run_id))
+    }
+
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {
         let task = grove_core::orchestrator::queue_task(
             &self.project,

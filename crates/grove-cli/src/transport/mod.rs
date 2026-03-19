@@ -206,6 +206,10 @@ pub trait Transport {
     fn delete_worktree(&self, id: &str) -> CliResult<()>;
     fn delete_all_worktrees(&self) -> CliResult<serde_json::Value>;
 
+    // ── Task 16 TUI run-watch method ──────────────────────────────────────────
+    /// Fetch a single run by id. Returns `Ok(None)` when the run does not exist.
+    fn get_run(&self, run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>>;
+
     // ── Task 15 cleanup/gc methods ────────────────────────────────────────────
     fn run_cleanup(
         &self,
@@ -938,6 +942,15 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.run_gc(dry_run),
         }
     }
+
+    fn get_run(&self, run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>> {
+        match self {
+            GroveTransport::Direct(t) => t.get_run(run_id),
+            GroveTransport::Socket(t) => t.get_run(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_run(run_id),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -1278,6 +1291,10 @@ impl Transport for TestTransport {
 
     fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
         Ok(serde_json::Value::Null)
+    }
+
+    fn get_run(&self, _run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>> {
+        Ok(None)
     }
 }
 

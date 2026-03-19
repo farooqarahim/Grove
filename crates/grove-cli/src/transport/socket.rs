@@ -356,4 +356,8 @@ impl Transport for SocketTransport {
     fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
+
+    fn get_run(&self, _run_id: &str) -> CliResult<Option<grove_core::orchestrator::RunRecord>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
 }

@@ -1,6 +1,6 @@
 use crate::cli::{PermissionModeArg, QueueArgs, RunArgs, TaskCancelArgs, TasksArgs};
 use crate::error::{CliError, CliResult};
-use crate::output::{text, OutputMode};
+use crate::output::{OutputMode, text};
 use crate::transport::{GroveTransport, StartRunRequest, Transport};
 
 pub fn run_cmd(args: RunArgs, transport: GroveTransport, mode: OutputMode) -> CliResult<()> {
@@ -33,7 +33,7 @@ pub fn run_cmd(args: RunArgs, transport: GroveTransport, mode: OutputMode) -> Cl
     // --watch: delegate to TUI run-watch (only with feature=tui)
     #[cfg(feature = "tui")]
     if args.watch {
-        return crate::tui::run_watch::run(result.run_id, transport);
+        return crate::tui::run_watch::run(result.run_id, result.objective.clone(), &transport);
     }
     #[cfg(not(feature = "tui"))]
     if args.watch {
@@ -72,7 +72,10 @@ pub fn queue_cmd(args: QueueArgs, transport: GroveTransport, mode: OutputMode) -
         None,
     )?;
     match mode {
-        OutputMode::Json => println!("{}", serde_json::to_string(&task).map_err(|e| CliError::Other(e.to_string()))?),
+        OutputMode::Json => println!(
+            "{}",
+            serde_json::to_string(&task).map_err(|e| CliError::Other(e.to_string()))?
+        ),
         OutputMode::Text { .. } => println!(
             "queued {} (priority {})",
             task.id.chars().take(8).collect::<String>(),
@@ -87,7 +90,10 @@ pub fn tasks_cmd(args: TasksArgs, transport: GroveTransport, mode: OutputMode) -
     let limit = usize::try_from(args.limit).unwrap_or(0);
     let tasks: Vec<_> = all_tasks.into_iter().take(limit).collect();
     match mode {
-        OutputMode::Json => println!("{}", serde_json::to_string(&tasks).map_err(|e| CliError::Other(e.to_string()))?),
+        OutputMode::Json => println!(
+            "{}",
+            serde_json::to_string(&tasks).map_err(|e| CliError::Other(e.to_string()))?
+        ),
         OutputMode::Text { .. } => {
             if tasks.is_empty() {
                 println!("{}", text::dim("no tasks"));
@@ -157,7 +163,10 @@ mod tests {
     fn tasks_cmd_json_mode_renders_ok() {
         let t = GroveTransport::Test(TestTransport::default());
         let result = tasks_cmd(
-            crate::cli::TasksArgs { limit: 10, refresh: false },
+            crate::cli::TasksArgs {
+                limit: 10,
+                refresh: false,
+            },
             t,
             crate::output::OutputMode::Json,
         );
@@ -168,7 +177,9 @@ mod tests {
     fn task_cancel_cmd_returns_not_implemented_for_test_transport() {
         let t = GroveTransport::Test(TestTransport::default());
         let result = task_cancel_cmd(
-            crate::cli::TaskCancelArgs { task_id: "abc123".into() },
+            crate::cli::TaskCancelArgs {
+                task_id: "abc123".into(),
+            },
             t,
             crate::output::OutputMode::Text { no_color: true },
         );

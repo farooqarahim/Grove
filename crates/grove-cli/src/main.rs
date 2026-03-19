@@ -3,6 +3,7 @@ mod commands;
 mod error;
 mod output;
 mod transport;
+mod tui;
 
 use clap::Parser;
 use cli::Cli;
@@ -14,7 +15,10 @@ fn main() {
 
     if let Err(e) = commands::dispatch(cli, transport) {
         if mode_json {
-            println!("{}", output::json::emit_error_json(&e.to_string(), e.exit_code()));
+            println!(
+                "{}",
+                output::json::emit_error_json(&e.to_string(), e.exit_code())
+            );
         } else {
             eprintln!("error: {e}");
         }
