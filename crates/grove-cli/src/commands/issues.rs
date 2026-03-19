@@ -9,13 +9,6 @@ fn field<'a>(v: &'a serde_json::Value, key: &str) -> &'a str {
     v.get(key).and_then(|f| f.as_str()).unwrap_or("")
 }
 
-fn field_opt(v: &serde_json::Value, key: &str) -> String {
-    v.get(key)
-        .and_then(|f| f.as_str())
-        .unwrap_or("")
-        .to_string()
-}
-
 fn truncate(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
@@ -30,11 +23,10 @@ fn priority_dot(v: &serde_json::Value) -> &'static str {
 
 /// Build the standard issue table row: ID, PROVIDER, TITLE, STATUS, PRIORITY, ASSIGNEE
 fn issue_row(v: &serde_json::Value) -> Vec<String> {
-    let raw_id = field_opt(v, "id");
-    let id = if raw_id.is_empty() {
+    let id = if field(v, "id").is_empty() {
         format!("{}:{}", field(v, "provider"), field(v, "external_id"))
     } else {
-        raw_id
+        field(v, "id").to_owned()
     };
     vec![
         truncate(&id, 20),
@@ -116,15 +108,14 @@ pub fn create_cmd(
             println!("{}", json_out::emit_json_pretty(&created));
         }
         OutputMode::Text { .. } => {
-            let raw_id = field_opt(&created, "id");
-            let id = if raw_id.is_empty() {
+            let id = if field(&created, "id").is_empty() {
                 format!(
                     "{}:{}",
                     field(&created, "provider"),
                     field(&created, "external_id")
                 )
             } else {
-                raw_id
+                field(&created, "id").to_owned()
             };
             println!("created issue {id}");
         }
@@ -206,7 +197,7 @@ pub fn board_cmd(
                 // Filter to a specific column
                 let col = kanban_column(sf);
                 let issue_col = kanban_column(field(v, "status"));
-                if col != issue_col && !field(v, "status").eq_ignore_ascii_case(sf) {
+                if col != issue_col {
                     return false;
                 }
             }
@@ -226,21 +217,28 @@ pub fn board_cmd(
 
     match mode {
         OutputMode::Json => {
+            let empty: Vec<&serde_json::Value> = Vec::new();
             let obj = serde_json::json!({
-                "OPEN": groups["OPEN"].iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
-                "IN_PROGRESS": groups["IN_PROGRESS"].iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
-                "IN_REVIEW": groups["IN_REVIEW"].iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
-                "DONE": groups["DONE"].iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
+                "OPEN": groups.get("OPEN").unwrap_or(&empty).iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
+                "IN_PROGRESS": groups.get("IN_PROGRESS").unwrap_or(&empty).iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
+                "IN_REVIEW": groups.get("IN_REVIEW").unwrap_or(&empty).iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
+                "DONE": groups.get("DONE").unwrap_or(&empty).iter().map(|v| (*v).clone()).collect::<Vec<_>>(),
             });
             println!("{}", json_out::emit_json_pretty(&obj));
         }
         OutputMode::Text { .. } => {
             // Column display labels
             let col_labels = [
-                format!("OPEN ({})", groups["OPEN"].len()),
-                format!("IN PROGRESS ({})", groups["IN_PROGRESS"].len()),
-                format!("IN REVIEW ({})", groups["IN_REVIEW"].len()),
-                format!("DONE ({})", groups["DONE"].len()),
+                format!("OPEN ({})", groups.get("OPEN").map_or(0, |v| v.len())),
+                format!(
+                    "IN PROGRESS ({})",
+                    groups.get("IN_PROGRESS").map_or(0, |v| v.len())
+                ),
+                format!(
+                    "IN REVIEW ({})",
+                    groups.get("IN_REVIEW").map_or(0, |v| v.len())
+                ),
+                format!("DONE ({})", groups.get("DONE").map_or(0, |v| v.len())),
             ];
             let col_width = 22usize;
 
@@ -262,19 +260,23 @@ pub fn board_cmd(
             println!("{sep}");
 
             // Issue rows — find the max count across columns
-            let max_rows = columns.iter().map(|c| groups[*c].len()).max().unwrap_or(0);
+            let max_rows = columns
+                .iter()
+                .map(|c| groups.get(*c).map_or(0, |v| v.len()))
+                .max()
+                .unwrap_or(0);
 
             for i in 0..max_rows {
                 let row: String = columns
                     .iter()
                     .map(|col| {
-                        if let Some(v) = groups[*col].get(i) {
+                        let col_issues = groups.get(*col).map(|v| v.as_slice()).unwrap_or(&[]);
+                        if let Some(v) = col_issues.get(i) {
                             let id = {
-                                let raw_id = field_opt(v, "id");
-                                let raw = if raw_id.is_empty() {
+                                let raw = if field(v, "id").is_empty() {
                                     format!("{}:{}", field(v, "provider"), field(v, "external_id"))
                                 } else {
-                                    raw_id
+                                    field(v, "id").to_owned()
                                 };
                                 truncate(&raw, 10)
                             };
@@ -338,7 +340,7 @@ pub fn sync_cmd(
                         .map(|a| a.len())
                         .unwrap_or(0);
                     vec![
-                        field_opt(r, "provider"),
+                        field(r, "provider").to_owned(),
                         new_count.to_string(),
                         updated.to_string(),
                         closed.to_string(),
@@ -417,9 +419,9 @@ pub fn dispatch(a: IssueArgs, t: GroveTransport, m: OutputMode) -> CliResult<()>
             query,
             limit,
             provider,
-        } => search_cmd(&query, limit as i64, provider.as_deref(), &t, &m),
+        } => search_cmd(&query, i64::from(limit), provider.as_deref(), &t, &m),
         // Remaining actions handled in Task 13
-        _ => Ok(()),
+        _ => Err(CliError::Other("not yet implemented".into())),
     }
 }
 
@@ -548,10 +550,9 @@ mod tests {
     }
 
     #[test]
-    fn issue_list_with_data_text_ok() {
-        // Feed a synthetic issue through the TestTransport by wrapping with a custom impl.
-        // Since TestTransport always returns empty, just verify the empty path renders OK.
+    fn issue_board_with_status_filter_ok() {
+        // Verify board_cmd with a status filter does not panic even when groups are empty.
         let t = GroveTransport::Test(TestTransport::default());
-        assert!(list_cmd(false, &t, &text_mode()).is_ok());
+        assert!(board_cmd(Some("open"), None, None, None, &t, &text_mode()).is_ok());
     }
 }
