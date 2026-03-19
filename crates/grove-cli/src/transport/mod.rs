@@ -75,7 +75,16 @@ pub trait Transport {
     fn cancel_task(&self, task_id: &str) -> CliResult<()>;
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult>;
     fn drain_queue(&self, project: &std::path::Path) -> CliResult<()>;
-    // Tasks 9–15 add more methods here. Update all 3 impls + TestTransport each time.
+
+    // ── Task 9 read/mutation methods ─────────────────────────────────────────
+    fn get_logs(&self, run_id: &str, all: bool) -> CliResult<Vec<serde_json::Value>>;
+    fn get_report(&self, run_id: &str) -> CliResult<serde_json::Value>;
+    fn get_plan(&self, run_id: Option<&str>) -> CliResult<serde_json::Value>;
+    fn get_subtasks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>>;
+    fn get_sessions(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>>;
+    fn abort_run(&self, run_id: &str) -> CliResult<()>;
+    fn resume_run(&self, run_id: &str) -> CliResult<()>;
+    // Tasks 10–15 add more methods here. Update all 3 impls + TestTransport each time.
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -233,6 +242,69 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.drain_queue(project),
         }
     }
+
+    fn get_logs(&self, run_id: &str, all: bool) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.get_logs(run_id, all),
+            GroveTransport::Socket(t) => t.get_logs(run_id, all),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_logs(run_id, all),
+        }
+    }
+
+    fn get_report(&self, run_id: &str) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.get_report(run_id),
+            GroveTransport::Socket(t) => t.get_report(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_report(run_id),
+        }
+    }
+
+    fn get_plan(&self, run_id: Option<&str>) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.get_plan(run_id),
+            GroveTransport::Socket(t) => t.get_plan(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_plan(run_id),
+        }
+    }
+
+    fn get_subtasks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.get_subtasks(run_id),
+            GroveTransport::Socket(t) => t.get_subtasks(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_subtasks(run_id),
+        }
+    }
+
+    fn get_sessions(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.get_sessions(run_id),
+            GroveTransport::Socket(t) => t.get_sessions(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_sessions(run_id),
+        }
+    }
+
+    fn abort_run(&self, run_id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.abort_run(run_id),
+            GroveTransport::Socket(t) => t.abort_run(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.abort_run(run_id),
+        }
+    }
+
+    fn resume_run(&self, run_id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.resume_run(run_id),
+            GroveTransport::Socket(t) => t.resume_run(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.resume_run(run_id),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -294,6 +366,34 @@ impl Transport for TestTransport {
     }
 
     fn drain_queue(&self, _project: &std::path::Path) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn get_logs(&self, _run_id: &str, _all: bool) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn get_report(&self, _run_id: &str) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn get_plan(&self, _run_id: Option<&str>) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn get_subtasks(&self, _run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn get_sessions(&self, _run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn abort_run(&self, _run_id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn resume_run(&self, _run_id: &str) -> CliResult<()> {
         Err(CliError::Other("not implemented".into()))
     }
 }

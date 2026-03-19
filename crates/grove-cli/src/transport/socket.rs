@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use crate::error::{CliError, CliResult};
 use super::{RunResult, StartRunRequest, Transport};
+use crate::error::{CliError, CliResult};
 
 pub struct SocketTransport {
     sock_path: PathBuf,
@@ -76,6 +76,34 @@ impl Transport for SocketTransport {
     }
 
     fn drain_queue(&self, _project: &std::path::Path) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_logs(&self, _run_id: &str, _all: bool) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_report(&self, _run_id: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_plan(&self, _run_id: Option<&str>) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_subtasks(&self, _run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_sessions(&self, _run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn abort_run(&self, _run_id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn resume_run(&self, _run_id: &str) -> CliResult<()> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
 }
