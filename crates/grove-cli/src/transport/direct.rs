@@ -441,6 +441,114 @@ impl Transport for DirectTransport {
             .map_err(CliError::Core)
     }
 
+    // ── Task 15 signal methods (direct DB access via grove-core) ──────────────
+
+    fn send_signal(
+        &self,
+        run_id: &str,
+        from: &str,
+        to: &str,
+        signal_type: &str,
+        payload: Option<&str>,
+        priority: Option<i64>,
+    ) -> CliResult<()> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let sig_type = grove_core::signals::SignalType::parse(signal_type)
+            .ok_or_else(|| CliError::BadArg(format!("unknown signal type: {signal_type}")))?;
+        let sig_priority = priority
+            .map(|p| match p {
+                i64::MIN..=-1 => grove_core::signals::SignalPriority::Low,
+                0 => grove_core::signals::SignalPriority::Normal,
+                1 => grove_core::signals::SignalPriority::High,
+                _ => grove_core::signals::SignalPriority::Urgent,
+            })
+            .unwrap_or_default();
+        let payload_val: serde_json::Value = payload
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(serde_json::Value::Null);
+        grove_core::signals::send_signal(
+            &conn,
+            run_id,
+            from,
+            to,
+            sig_type,
+            sig_priority,
+            payload_val,
+        )
+        .map(|_| ())
+        .map_err(CliError::Core)
+    }
+
+    fn check_signals(&self, run_id: &str, agent: &str) -> CliResult<Vec<serde_json::Value>> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let signals =
+            grove_core::signals::check_signals(&conn, run_id, agent).map_err(CliError::Core)?;
+        signals
+            .into_iter()
+            .map(|s| serde_json::to_value(&s).map_err(|e| CliError::Other(e.to_string())))
+            .collect()
+    }
+
+    fn list_signals(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        let db = grove_core::db::DbHandle::new(&self.project);
+        let conn = db.connect().map_err(CliError::Core)?;
+        let signals = grove_core::signals::list_for_run(&conn, run_id).map_err(CliError::Core)?;
+        signals
+            .into_iter()
+            .map(|s| serde_json::to_value(&s).map_err(|e| CliError::Other(e.to_string())))
+            .collect()
+    }
+
+    // ── Task 15 hook methods ──────────────────────────────────────────────────
+
+    fn run_hook(
+        &self,
+        _event: &str,
+        _agent_type: Option<&str>,
+        _run_id: Option<&str>,
+        _session_id: Option<&str>,
+        _tool: Option<&str>,
+        _file_path: Option<&str>,
+    ) -> CliResult<()> {
+        // Hooks are dispatched by the grove daemon; no direct-mode equivalent yet.
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    // ── Task 15 worktree methods ──────────────────────────────────────────────
+
+    fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn clean_worktrees(&self) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn delete_worktree(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn delete_all_worktrees(&self, _force: bool) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    // ── Task 15 cleanup/gc methods ────────────────────────────────────────────
+
+    fn run_cleanup(
+        &self,
+        _project: bool,
+        _conversation: bool,
+        _dry_run: bool,
+    ) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {
         let task = grove_core::orchestrator::queue_task(
             &self.project,

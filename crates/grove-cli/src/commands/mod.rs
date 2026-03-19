@@ -16,8 +16,8 @@ pub mod project;
 pub mod run;
 pub mod signals;
 pub mod status;
-pub mod worktrees;
 pub mod workspace;
+pub mod worktrees;
 
 #[cfg(feature = "tui")]
 pub mod tui_cmd;
@@ -63,7 +63,7 @@ pub fn dispatch(cli: Cli, transport: GroveTransport) -> CliResult<()> {
         Commands::Project(a) => project::dispatch(a, p, transport, mode),
         Commands::Conversation(a) => conversation::dispatch(a, transport, mode),
         Commands::Signal(a) => signals::dispatch(a, transport, mode),
-        Commands::Hook(a) => hooks::run(a, p, mode),
+        Commands::Hook(a) => hooks::run(a, transport, mode),
         Commands::Worktrees(a) => worktrees::run(a, transport, mode),
         Commands::Cleanup(a) => cleanup::cleanup_cmd(a, transport, mode),
         Commands::Gc(a) => cleanup::gc_cmd(a, transport, mode),

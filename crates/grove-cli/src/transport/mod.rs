@@ -175,7 +175,45 @@ pub trait Transport {
     fn delete_conversation(&self, id: &str) -> CliResult<()>;
     fn rebase_conversation(&self, id: &str) -> CliResult<()>;
     fn merge_conversation(&self, id: &str) -> CliResult<()>;
-    // Tasks 15+ add more methods here. Update all 3 impls + TestTransport each time.
+
+    // ── Task 15 signal methods ────────────────────────────────────────────────
+    fn send_signal(
+        &self,
+        run_id: &str,
+        from: &str,
+        to: &str,
+        signal_type: &str,
+        payload: Option<&str>,
+        priority: Option<i64>,
+    ) -> CliResult<()>;
+    fn check_signals(&self, run_id: &str, agent: &str) -> CliResult<Vec<serde_json::Value>>;
+    fn list_signals(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>>;
+
+    // ── Task 15 hook methods ──────────────────────────────────────────────────
+    fn run_hook(
+        &self,
+        event: &str,
+        agent_type: Option<&str>,
+        run_id: Option<&str>,
+        session_id: Option<&str>,
+        tool: Option<&str>,
+        file_path: Option<&str>,
+    ) -> CliResult<()>;
+
+    // ── Task 15 worktree methods ──────────────────────────────────────────────
+    fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>>;
+    fn clean_worktrees(&self) -> CliResult<serde_json::Value>;
+    fn delete_worktree(&self, id: &str) -> CliResult<()>;
+    fn delete_all_worktrees(&self, force: bool) -> CliResult<serde_json::Value>;
+
+    // ── Task 15 cleanup/gc methods ────────────────────────────────────────────
+    fn run_cleanup(
+        &self,
+        project: bool,
+        conversation: bool,
+        dry_run: bool,
+    ) -> CliResult<serde_json::Value>;
+    fn run_gc(&self, dry_run: bool) -> CliResult<serde_json::Value>;
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -773,6 +811,129 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.merge_conversation(id),
         }
     }
+
+    fn send_signal(
+        &self,
+        run_id: &str,
+        from: &str,
+        to: &str,
+        signal_type: &str,
+        payload: Option<&str>,
+        priority: Option<i64>,
+    ) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => {
+                t.send_signal(run_id, from, to, signal_type, payload, priority)
+            }
+            GroveTransport::Socket(t) => {
+                t.send_signal(run_id, from, to, signal_type, payload, priority)
+            }
+            #[cfg(test)]
+            GroveTransport::Test(t) => {
+                t.send_signal(run_id, from, to, signal_type, payload, priority)
+            }
+        }
+    }
+
+    fn check_signals(&self, run_id: &str, agent: &str) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.check_signals(run_id, agent),
+            GroveTransport::Socket(t) => t.check_signals(run_id, agent),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.check_signals(run_id, agent),
+        }
+    }
+
+    fn list_signals(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.list_signals(run_id),
+            GroveTransport::Socket(t) => t.list_signals(run_id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.list_signals(run_id),
+        }
+    }
+
+    fn run_hook(
+        &self,
+        event: &str,
+        agent_type: Option<&str>,
+        run_id: Option<&str>,
+        session_id: Option<&str>,
+        tool: Option<&str>,
+        file_path: Option<&str>,
+    ) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => {
+                t.run_hook(event, agent_type, run_id, session_id, tool, file_path)
+            }
+            GroveTransport::Socket(t) => {
+                t.run_hook(event, agent_type, run_id, session_id, tool, file_path)
+            }
+            #[cfg(test)]
+            GroveTransport::Test(t) => {
+                t.run_hook(event, agent_type, run_id, session_id, tool, file_path)
+            }
+        }
+    }
+
+    fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.list_worktrees(),
+            GroveTransport::Socket(t) => t.list_worktrees(),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.list_worktrees(),
+        }
+    }
+
+    fn clean_worktrees(&self) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.clean_worktrees(),
+            GroveTransport::Socket(t) => t.clean_worktrees(),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.clean_worktrees(),
+        }
+    }
+
+    fn delete_worktree(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.delete_worktree(id),
+            GroveTransport::Socket(t) => t.delete_worktree(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.delete_worktree(id),
+        }
+    }
+
+    fn delete_all_worktrees(&self, force: bool) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.delete_all_worktrees(force),
+            GroveTransport::Socket(t) => t.delete_all_worktrees(force),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.delete_all_worktrees(force),
+        }
+    }
+
+    fn run_cleanup(
+        &self,
+        project: bool,
+        conversation: bool,
+        dry_run: bool,
+    ) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.run_cleanup(project, conversation, dry_run),
+            GroveTransport::Socket(t) => t.run_cleanup(project, conversation, dry_run),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.run_cleanup(project, conversation, dry_run),
+        }
+    }
+
+    fn run_gc(&self, dry_run: bool) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.run_gc(dry_run),
+            GroveTransport::Socket(t) => t.run_gc(dry_run),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.run_gc(dry_run),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -1050,6 +1211,67 @@ impl Transport for TestTransport {
 
     fn merge_conversation(&self, _id: &str) -> CliResult<()> {
         Err(CliError::Other("not implemented".into()))
+    }
+
+    fn send_signal(
+        &self,
+        _run_id: &str,
+        _from: &str,
+        _to: &str,
+        _signal_type: &str,
+        _payload: Option<&str>,
+        _priority: Option<i64>,
+    ) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn check_signals(&self, _run_id: &str, _agent: &str) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn list_signals(&self, _run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn run_hook(
+        &self,
+        _event: &str,
+        _agent_type: Option<&str>,
+        _run_id: Option<&str>,
+        _session_id: Option<&str>,
+        _tool: Option<&str>,
+        _file_path: Option<&str>,
+    ) -> CliResult<()> {
+        Ok(())
+    }
+
+    fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn clean_worktrees(&self) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn delete_worktree(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn delete_all_worktrees(&self, _force: bool) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn run_cleanup(
+        &self,
+        _project: bool,
+        _conversation: bool,
+        _dry_run: bool,
+    ) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
     }
 }
 

@@ -293,4 +293,65 @@ impl Transport for SocketTransport {
     fn merge_conversation(&self, _id: &str) -> CliResult<()> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
+
+    fn send_signal(
+        &self,
+        _run_id: &str,
+        _from: &str,
+        _to: &str,
+        _signal_type: &str,
+        _payload: Option<&str>,
+        _priority: Option<i64>,
+    ) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn check_signals(&self, _run_id: &str, _agent: &str) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn list_signals(&self, _run_id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn run_hook(
+        &self,
+        _event: &str,
+        _agent_type: Option<&str>,
+        _run_id: Option<&str>,
+        _session_id: Option<&str>,
+        _tool: Option<&str>,
+        _file_path: Option<&str>,
+    ) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn clean_worktrees(&self) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn delete_worktree(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn delete_all_worktrees(&self, _force: bool) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn run_cleanup(
+        &self,
+        _project: bool,
+        _conversation: bool,
+        _dry_run: bool,
+    ) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
 }
