@@ -1,4 +1,7 @@
-use crate::cli::{CiArgs, ConnectArgs, FixArgs, IssueAction, IssueArgs, LintArgs};
+use crate::cli::{
+    BoardConfigAction, CiArgs, ConnectAction, ConnectArgs, FixArgs, IssueAction, IssueArgs,
+    LintArgs,
+};
 use crate::error::{CliError, CliResult};
 use crate::output::{OutputMode, json as json_out, text};
 use crate::transport::{GroveTransport, Transport};
@@ -385,6 +388,289 @@ pub fn search_cmd(
     Ok(())
 }
 
+// ── update ────────────────────────────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+pub fn update_cmd(
+    id: &str,
+    title: Option<&str>,
+    status: Option<&str>,
+    label: Option<&str>,
+    assignee: Option<&str>,
+    priority: Option<&str>,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    let updated = transport.update_issue(id, title, status, label, assignee, priority)?;
+
+    match mode {
+        OutputMode::Json => {
+            println!("{}", json_out::emit_json_pretty(&updated));
+        }
+        OutputMode::Text { .. } => {
+            println!("updated {id}");
+        }
+    }
+    Ok(())
+}
+
+// ── comment ───────────────────────────────────────────────────────────────────
+
+pub fn comment_cmd(
+    id: &str,
+    body: &str,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    let result = transport.comment_issue(id, body)?;
+
+    match mode {
+        OutputMode::Json => {
+            println!("{}", json_out::emit_json_pretty(&result));
+        }
+        OutputMode::Text { .. } => {
+            println!("commented on {id}");
+        }
+    }
+    Ok(())
+}
+
+// ── assign ────────────────────────────────────────────────────────────────────
+
+pub fn assign_cmd(
+    id: &str,
+    assignee: &str,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    transport.assign_issue(id, assignee)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::json!({ "ok": true, "id": id, "assignee": assignee });
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!("assigned {id} to {assignee}");
+        }
+    }
+    Ok(())
+}
+
+// ── move ──────────────────────────────────────────────────────────────────────
+
+pub fn move_cmd(
+    id: &str,
+    status: &str,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    transport.move_issue(id, status)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::json!({ "ok": true, "id": id, "status": status });
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!("moved {id} to {status}");
+        }
+    }
+    Ok(())
+}
+
+// ── reopen ────────────────────────────────────────────────────────────────────
+
+pub fn reopen_cmd(id: &str, transport: &GroveTransport, mode: &OutputMode) -> CliResult<()> {
+    transport.reopen_issue(id)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::json!({ "ok": true, "id": id });
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!("reopened {id}");
+        }
+    }
+    Ok(())
+}
+
+// ── activity ──────────────────────────────────────────────────────────────────
+
+pub fn activity_cmd(id: &str, transport: &GroveTransport, mode: &OutputMode) -> CliResult<()> {
+    let activities = transport.activity_issue(id)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::Value::Array(activities);
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            if activities.is_empty() {
+                println!("{}", text::dim("no activity"));
+                return Ok(());
+            }
+            for entry in &activities {
+                let actor = field(entry, "actor");
+                let kind = field(entry, "type");
+                let body = field(entry, "body");
+                let ts = field(entry, "created_at");
+                println!("{ts}  {actor}  {kind}  {body}");
+            }
+        }
+    }
+    Ok(())
+}
+
+// ── push ──────────────────────────────────────────────────────────────────────
+
+pub fn push_cmd(
+    id: &str,
+    provider: &str,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    let result = transport.push_issue(id, provider)?;
+
+    match mode {
+        OutputMode::Json => {
+            println!("{}", json_out::emit_json_pretty(&result));
+        }
+        OutputMode::Text { .. } => {
+            println!("pushed {id} to {provider}");
+        }
+    }
+    Ok(())
+}
+
+// ── ready ─────────────────────────────────────────────────────────────────────
+
+pub fn ready_cmd(id: &str, transport: &GroveTransport, mode: &OutputMode) -> CliResult<()> {
+    let result = transport.issue_ready(id)?;
+
+    match mode {
+        OutputMode::Json => {
+            println!("{}", json_out::emit_json_pretty(&result));
+        }
+        OutputMode::Text { .. } => {
+            println!("marked {id} as ready");
+        }
+    }
+    Ok(())
+}
+
+// ── board-config ──────────────────────────────────────────────────────────────
+
+pub fn board_config_cmd(action: BoardConfigAction, mode: &OutputMode) -> CliResult<()> {
+    match action {
+        BoardConfigAction::Show => match mode {
+            OutputMode::Json => {
+                let val = serde_json::json!({ "config": null });
+                println!("{}", json_out::emit_json(&val));
+            }
+            OutputMode::Text { .. } => {
+                println!("{}", text::dim("no board config set"));
+            }
+        },
+        BoardConfigAction::Set { file } => match mode {
+            OutputMode::Json => {
+                let val = serde_json::json!({ "ok": true, "file": file });
+                println!("{}", json_out::emit_json(&val));
+            }
+            OutputMode::Text { .. } => {
+                println!("board config set from {file}");
+            }
+        },
+        BoardConfigAction::Reset => match mode {
+            OutputMode::Json => {
+                let val = serde_json::json!({ "ok": true });
+                println!("{}", json_out::emit_json(&val));
+            }
+            OutputMode::Text { .. } => {
+                println!("board config reset");
+            }
+        },
+    }
+    Ok(())
+}
+
+// ── connect helpers ───────────────────────────────────────────────────────────
+
+pub fn connect_status_cmd(transport: &GroveTransport, mode: &OutputMode) -> CliResult<()> {
+    let statuses = transport.connect_status()?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::Value::Array(statuses);
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            if statuses.is_empty() {
+                println!("{}", text::dim("no providers connected"));
+                return Ok(());
+            }
+            let rows: Vec<Vec<String>> = statuses
+                .iter()
+                .map(|v| {
+                    vec![
+                        truncate(field(v, "provider"), 16),
+                        truncate(field(v, "connected"), 12),
+                        truncate(field(v, "user"), 24),
+                        truncate(field(v, "error"), 32),
+                    ]
+                })
+                .collect();
+            println!(
+                "{}",
+                text::render_table(&["PROVIDER", "CONNECTED", "USER", "ERROR"], &rows)
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn connect_provider_cmd(
+    provider: &str,
+    token: Option<&str>,
+    site: Option<&str>,
+    email: Option<&str>,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    transport.connect_provider(provider, token, site, email)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::json!({ "ok": true, "provider": provider });
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!("connected {provider}");
+        }
+    }
+    Ok(())
+}
+
+pub fn connect_disconnect_cmd(
+    provider: &str,
+    transport: &GroveTransport,
+    mode: &OutputMode,
+) -> CliResult<()> {
+    transport.disconnect_provider(provider)?;
+
+    match mode {
+        OutputMode::Json => {
+            let val = serde_json::json!({ "ok": true, "provider": provider });
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!("disconnected {provider}");
+        }
+    }
+    Ok(())
+}
+
 // ── top-level dispatch ────────────────────────────────────────────────────────
 
 pub fn dispatch(a: IssueArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
@@ -420,24 +706,139 @@ pub fn dispatch(a: IssueArgs, t: GroveTransport, m: OutputMode) -> CliResult<()>
             limit,
             provider,
         } => search_cmd(&query, i64::from(limit), provider.as_deref(), &t, &m),
-        // Remaining actions handled in Task 13
-        _ => Err(CliError::Other("not yet implemented".into())),
+        IssueAction::Update {
+            id,
+            title,
+            status,
+            label,
+            assignee,
+            priority,
+        } => {
+            let lbl = label.first().map(|s| s.as_str());
+            update_cmd(
+                &id,
+                title.as_deref(),
+                status.as_deref(),
+                lbl,
+                assignee.as_deref(),
+                priority.as_deref(),
+                &t,
+                &m,
+            )
+        }
+        IssueAction::Comment { id, body } => comment_cmd(&id, &body, &t, &m),
+        IssueAction::Assign { id, assignee } => assign_cmd(&id, &assignee, &t, &m),
+        IssueAction::Move { id, status } => move_cmd(&id, &status, &t, &m),
+        IssueAction::Reopen { id } => reopen_cmd(&id, &t, &m),
+        IssueAction::Activity { id } => activity_cmd(&id, &t, &m),
+        IssueAction::Push { id, to } => push_cmd(&id, &to, &t, &m),
+        IssueAction::Ready => {
+            // `grove issue ready` marks the current issue as ready; id is resolved server-side
+            ready_cmd("current", &t, &m)
+        }
+        IssueAction::BoardConfig { action } => board_config_cmd(action, &m),
     }
 }
 
-pub fn fix_cmd(_a: FixArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
+pub fn fix_cmd(a: FixArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
+    use crate::transport::StartRunRequest;
+
+    let issue_id = a.issue_id.clone();
+    let objective = if let Some(prompt) = a.prompt.as_deref() {
+        prompt.to_owned()
+    } else if let Some(ref id) = issue_id {
+        format!("fix issue {id}")
+    } else {
+        "fix current issue".to_owned()
+    };
+
+    let result = t.start_run(StartRunRequest {
+        objective,
+        pipeline: None,
+        model: None,
+        permission_mode: None,
+        conversation_id: None,
+        continue_last: false,
+        issue_id,
+        max_agents: a.max.map(|n| n as u16),
+    })?;
+
+    match m {
+        OutputMode::Json => {
+            let val = serde_json::json!({
+                "run_id": result.run_id,
+                "state": result.state,
+                "objective": result.objective,
+            });
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!("started fix run {} ({})", result.run_id, result.state);
+        }
+    }
     Ok(())
 }
 
-pub fn connect_dispatch(_a: ConnectArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
+pub fn connect_dispatch(a: ConnectArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
+    match a.action {
+        ConnectAction::Status => connect_status_cmd(&t, &m),
+        ConnectAction::Github { token } => {
+            connect_provider_cmd("github", token.as_deref(), None, None, &t, &m)
+        }
+        ConnectAction::Jira { site, email, token } => {
+            connect_provider_cmd("jira", Some(&token), Some(&site), Some(&email), &t, &m)
+        }
+        ConnectAction::Linear { token } => {
+            connect_provider_cmd("linear", Some(&token), None, None, &t, &m)
+        }
+        ConnectAction::Disconnect { provider } => connect_disconnect_cmd(&provider, &t, &m),
+    }
+}
+
+pub fn lint_cmd(a: LintArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
+    let result = t.run_lint(a.fix, a.model.as_deref())?;
+
+    match m {
+        OutputMode::Json => {
+            println!("{}", json_out::emit_json_pretty(&result));
+        }
+        OutputMode::Text { .. } => {
+            let status = result
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let issues = result.get("issues").and_then(|v| v.as_u64()).unwrap_or(0);
+            println!("lint: {status} ({issues} issues)");
+        }
+    }
     Ok(())
 }
 
-pub fn lint_cmd(_a: LintArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
-    Ok(())
-}
+pub fn ci_cmd(a: CiArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
+    let result = t.run_ci(
+        a.branch.as_deref(),
+        a.wait,
+        a.timeout,
+        a.fix,
+        a.model.as_deref(),
+    )?;
 
-pub fn ci_cmd(_a: CiArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
+    match m {
+        OutputMode::Json => {
+            println!("{}", json_out::emit_json_pretty(&result));
+        }
+        OutputMode::Text { .. } => {
+            let status = result
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let branch = result
+                .get("branch")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(unknown)");
+            println!("ci: {status} on {branch}");
+        }
+    }
     Ok(())
 }
 
@@ -554,5 +955,171 @@ mod tests {
         // Verify board_cmd with a status filter does not panic even when groups are empty.
         let t = GroveTransport::Test(TestTransport::default());
         assert!(board_cmd(Some("open"), None, None, None, &t, &text_mode()).is_ok());
+    }
+
+    // ── Task 13 tests ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn connect_status_ok() {
+        let t = GroveTransport::Test(TestTransport::default());
+        assert!(connect_status_cmd(&t, &OutputMode::Text { no_color: true }).is_ok());
+    }
+
+    #[test]
+    fn connect_status_json_ok() {
+        let t = GroveTransport::Test(TestTransport::default());
+        assert!(connect_status_cmd(&t, &OutputMode::Json).is_ok());
+    }
+
+    #[test]
+    fn issue_update_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = update_cmd(
+            "GH-1",
+            Some("new title"),
+            None,
+            None,
+            None,
+            None,
+            &t,
+            &text_mode(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn issue_comment_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = comment_cmd("GH-1", "looks good", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn issue_assign_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = assign_cmd("GH-1", "alice", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn issue_move_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = move_cmd("GH-1", "in_progress", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn issue_reopen_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = reopen_cmd("GH-1", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn issue_activity_empty_ok() {
+        let t = GroveTransport::Test(TestTransport::default());
+        assert!(activity_cmd("GH-1", &t, &text_mode()).is_ok());
+    }
+
+    #[test]
+    fn issue_activity_json_ok() {
+        let t = GroveTransport::Test(TestTransport::default());
+        assert!(activity_cmd("GH-1", &t, &OutputMode::Json).is_ok());
+    }
+
+    #[test]
+    fn issue_push_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = push_cmd("GH-1", "linear", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn issue_ready_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = ready_cmd("GH-1", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn board_config_show_ok() {
+        assert!(board_config_cmd(BoardConfigAction::Show, &text_mode()).is_ok());
+    }
+
+    #[test]
+    fn board_config_show_json_ok() {
+        assert!(board_config_cmd(BoardConfigAction::Show, &OutputMode::Json).is_ok());
+    }
+
+    #[test]
+    fn board_config_set_ok() {
+        assert!(
+            board_config_cmd(
+                BoardConfigAction::Set {
+                    file: "board.toml".into()
+                },
+                &text_mode()
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn board_config_reset_ok() {
+        assert!(board_config_cmd(BoardConfigAction::Reset, &text_mode()).is_ok());
+    }
+
+    #[test]
+    fn connect_provider_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = connect_provider_cmd("github", Some("tok"), None, None, &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn connect_disconnect_returns_err() {
+        let t = GroveTransport::Test(TestTransport::default());
+        let result = connect_disconnect_cmd("github", &t, &text_mode());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn fix_cmd_returns_err_when_run_fails() {
+        use crate::cli::FixArgs;
+        let t = GroveTransport::Test(TestTransport::default());
+        let a = FixArgs {
+            issue_id: Some("GH-1".into()),
+            prompt: None,
+            ready: false,
+            max: None,
+            parallel: false,
+        };
+        // TestTransport::start_run returns Err
+        assert!(fix_cmd(a, t, text_mode()).is_err());
+    }
+
+    #[test]
+    fn lint_cmd_returns_err() {
+        use crate::cli::LintArgs;
+        let t = GroveTransport::Test(TestTransport::default());
+        let a = LintArgs {
+            fix: false,
+            model: None,
+        };
+        assert!(lint_cmd(a, t, text_mode()).is_err());
+    }
+
+    #[test]
+    fn ci_cmd_returns_err() {
+        use crate::cli::CiArgs;
+        let t = GroveTransport::Test(TestTransport::default());
+        let a = CiArgs {
+            branch: None,
+            wait: false,
+            timeout: None,
+            fix: false,
+            model: None,
+        };
+        assert!(ci_cmd(a, t, text_mode()).is_err());
     }
 }

@@ -64,7 +64,7 @@ impl Transport for SocketTransport {
         _title: &str,
         _body: Option<&str>,
         _labels: Vec<String>,
-        _priority: Option<&str>,
+        _priority: Option<i64>,
     ) -> CliResult<serde_json::Value> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
@@ -76,7 +76,7 @@ impl Transport for SocketTransport {
     fn search_issues(
         &self,
         _query: &str,
-        _limit: u32,
+        _limit: i64,
         _provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>> {
         Err(CliError::Transport("socket not yet implemented".into()))
@@ -155,6 +155,79 @@ impl Transport for SocketTransport {
     }
 
     fn select_llm(&self, _provider: &str, _model: Option<&str>) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn update_issue(
+        &self,
+        _id: &str,
+        _title: Option<&str>,
+        _status: Option<&str>,
+        _label: Option<&str>,
+        _assignee: Option<&str>,
+        _priority: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn comment_issue(&self, _id: &str, _body: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn assign_issue(&self, _id: &str, _assignee: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn move_issue(&self, _id: &str, _status: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn reopen_issue(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn activity_issue(&self, _id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn push_issue(&self, _id: &str, _provider: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn issue_ready(&self, _id: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn connect_status(&self) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn connect_provider(
+        &self,
+        _provider: &str,
+        _token: Option<&str>,
+        _site: Option<&str>,
+        _email: Option<&str>,
+    ) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn disconnect_provider(&self, _provider: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn run_lint(&self, _fix: bool, _model: Option<&str>) -> CliResult<serde_json::Value> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn run_ci(
+        &self,
+        _branch: Option<&str>,
+        _wait: bool,
+        _timeout: Option<u64>,
+        _fix: bool,
+        _model: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
 }

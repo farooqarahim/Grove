@@ -107,7 +107,43 @@ pub trait Transport {
     fn remove_api_key(&self, provider: &str) -> CliResult<()>;
     fn list_models(&self, provider: &str) -> CliResult<Vec<serde_json::Value>>;
     fn select_llm(&self, provider: &str, model: Option<&str>) -> CliResult<()>;
-    // Tasks 12–15 add more methods here. Update all 3 impls + TestTransport each time.
+
+    // ── Task 13 issue mutation methods ──────────────────────────────────────
+    fn update_issue(
+        &self,
+        id: &str,
+        title: Option<&str>,
+        status: Option<&str>,
+        label: Option<&str>,
+        assignee: Option<&str>,
+        priority: Option<&str>,
+    ) -> CliResult<serde_json::Value>;
+    fn comment_issue(&self, id: &str, body: &str) -> CliResult<serde_json::Value>;
+    fn assign_issue(&self, id: &str, assignee: &str) -> CliResult<()>;
+    fn move_issue(&self, id: &str, status: &str) -> CliResult<()>;
+    fn reopen_issue(&self, id: &str) -> CliResult<()>;
+    fn activity_issue(&self, id: &str) -> CliResult<Vec<serde_json::Value>>;
+    fn push_issue(&self, id: &str, provider: &str) -> CliResult<serde_json::Value>;
+    fn issue_ready(&self, id: &str) -> CliResult<serde_json::Value>;
+    fn connect_status(&self) -> CliResult<Vec<serde_json::Value>>;
+    fn connect_provider(
+        &self,
+        provider: &str,
+        token: Option<&str>,
+        site: Option<&str>,
+        email: Option<&str>,
+    ) -> CliResult<()>;
+    fn disconnect_provider(&self, provider: &str) -> CliResult<()>;
+    fn run_lint(&self, fix: bool, model: Option<&str>) -> CliResult<serde_json::Value>;
+    fn run_ci(
+        &self,
+        branch: Option<&str>,
+        wait: bool,
+        timeout: Option<u64>,
+        fix: bool,
+        model: Option<&str>,
+    ) -> CliResult<serde_json::Value>;
+    // Tasks 14–15 add more methods here. Update all 3 impls + TestTransport each time.
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -429,6 +465,148 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.select_llm(provider, model),
         }
     }
+
+    fn update_issue(
+        &self,
+        id: &str,
+        title: Option<&str>,
+        status: Option<&str>,
+        label: Option<&str>,
+        assignee: Option<&str>,
+        priority: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => {
+                t.update_issue(id, title, status, label, assignee, priority)
+            }
+            GroveTransport::Socket(t) => {
+                t.update_issue(id, title, status, label, assignee, priority)
+            }
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.update_issue(id, title, status, label, assignee, priority),
+        }
+    }
+
+    fn comment_issue(&self, id: &str, body: &str) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.comment_issue(id, body),
+            GroveTransport::Socket(t) => t.comment_issue(id, body),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.comment_issue(id, body),
+        }
+    }
+
+    fn assign_issue(&self, id: &str, assignee: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.assign_issue(id, assignee),
+            GroveTransport::Socket(t) => t.assign_issue(id, assignee),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.assign_issue(id, assignee),
+        }
+    }
+
+    fn move_issue(&self, id: &str, status: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.move_issue(id, status),
+            GroveTransport::Socket(t) => t.move_issue(id, status),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.move_issue(id, status),
+        }
+    }
+
+    fn reopen_issue(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.reopen_issue(id),
+            GroveTransport::Socket(t) => t.reopen_issue(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.reopen_issue(id),
+        }
+    }
+
+    fn activity_issue(&self, id: &str) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.activity_issue(id),
+            GroveTransport::Socket(t) => t.activity_issue(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.activity_issue(id),
+        }
+    }
+
+    fn push_issue(&self, id: &str, provider: &str) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.push_issue(id, provider),
+            GroveTransport::Socket(t) => t.push_issue(id, provider),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.push_issue(id, provider),
+        }
+    }
+
+    fn issue_ready(&self, id: &str) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.issue_ready(id),
+            GroveTransport::Socket(t) => t.issue_ready(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.issue_ready(id),
+        }
+    }
+
+    fn connect_status(&self) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.connect_status(),
+            GroveTransport::Socket(t) => t.connect_status(),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.connect_status(),
+        }
+    }
+
+    fn connect_provider(
+        &self,
+        provider: &str,
+        token: Option<&str>,
+        site: Option<&str>,
+        email: Option<&str>,
+    ) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.connect_provider(provider, token, site, email),
+            GroveTransport::Socket(t) => t.connect_provider(provider, token, site, email),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.connect_provider(provider, token, site, email),
+        }
+    }
+
+    fn disconnect_provider(&self, provider: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.disconnect_provider(provider),
+            GroveTransport::Socket(t) => t.disconnect_provider(provider),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.disconnect_provider(provider),
+        }
+    }
+
+    fn run_lint(&self, fix: bool, model: Option<&str>) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.run_lint(fix, model),
+            GroveTransport::Socket(t) => t.run_lint(fix, model),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.run_lint(fix, model),
+        }
+    }
+
+    fn run_ci(
+        &self,
+        branch: Option<&str>,
+        wait: bool,
+        timeout: Option<u64>,
+        fix: bool,
+        model: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.run_ci(branch, wait, timeout, fix, model),
+            GroveTransport::Socket(t) => t.run_ci(branch, wait, timeout, fix, model),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.run_ci(branch, wait, timeout, fix, model),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -569,6 +747,79 @@ impl Transport for TestTransport {
     }
 
     fn select_llm(&self, _provider: &str, _model: Option<&str>) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn update_issue(
+        &self,
+        _id: &str,
+        _title: Option<&str>,
+        _status: Option<&str>,
+        _label: Option<&str>,
+        _assignee: Option<&str>,
+        _priority: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn comment_issue(&self, _id: &str, _body: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn assign_issue(&self, _id: &str, _assignee: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn move_issue(&self, _id: &str, _status: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn reopen_issue(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn activity_issue(&self, _id: &str) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn push_issue(&self, _id: &str, _provider: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn issue_ready(&self, _id: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn connect_status(&self) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn connect_provider(
+        &self,
+        _provider: &str,
+        _token: Option<&str>,
+        _site: Option<&str>,
+        _email: Option<&str>,
+    ) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn disconnect_provider(&self, _provider: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn run_lint(&self, _fix: bool, _model: Option<&str>) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn run_ci(
+        &self,
+        _branch: Option<&str>,
+        _wait: bool,
+        _timeout: Option<u64>,
+        _fix: bool,
+        _model: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
         Err(CliError::Other("not implemented".into()))
     }
 }
