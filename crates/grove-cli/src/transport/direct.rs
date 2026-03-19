@@ -48,8 +48,39 @@ impl Transport for DirectTransport {
         Err(CliError::Other("not yet implemented".into()))
     }
 
-    fn list_issues(&self) -> CliResult<Vec<serde_json::Value>> {
-        Err(CliError::Other("not yet implemented".into()))
+    fn list_issues(&self, _cached: bool) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn get_issue(&self, _id: &str) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn create_issue(
+        &self,
+        _title: &str,
+        _body: Option<&str>,
+        _labels: Vec<String>,
+        _priority: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn close_issue(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn search_issues(
+        &self,
+        _query: &str,
+        _limit: u32,
+        _provider: Option<&str>,
+    ) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Other("not yet available".into()))
+    }
+
+    fn sync_issues(&self, _provider: Option<&str>, _full: bool) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not yet available".into()))
     }
 
     fn queue_task(

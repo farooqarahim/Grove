@@ -60,7 +60,23 @@ pub trait Transport {
         &self,
         limit: i64,
     ) -> CliResult<Vec<grove_core::db::repositories::conversations_repo::ConversationRow>>;
-    fn list_issues(&self) -> CliResult<Vec<serde_json::Value>>;
+    fn list_issues(&self, cached: bool) -> CliResult<Vec<serde_json::Value>>;
+    fn get_issue(&self, id: &str) -> CliResult<serde_json::Value>;
+    fn create_issue(
+        &self,
+        title: &str,
+        body: Option<&str>,
+        labels: Vec<String>,
+        priority: Option<&str>,
+    ) -> CliResult<serde_json::Value>;
+    fn close_issue(&self, id: &str) -> CliResult<()>;
+    fn search_issues(
+        &self,
+        query: &str,
+        limit: u32,
+        provider: Option<&str>,
+    ) -> CliResult<Vec<serde_json::Value>>;
+    fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value>;
 
     // ── Task 8 mutation methods ──────────────────────────────────────────────
     fn queue_task(
@@ -176,12 +192,68 @@ impl Transport for GroveTransport {
         }
     }
 
-    fn list_issues(&self) -> CliResult<Vec<serde_json::Value>> {
+    fn list_issues(&self, cached: bool) -> CliResult<Vec<serde_json::Value>> {
         match self {
-            GroveTransport::Direct(t) => t.list_issues(),
-            GroveTransport::Socket(t) => t.list_issues(),
+            GroveTransport::Direct(t) => t.list_issues(cached),
+            GroveTransport::Socket(t) => t.list_issues(cached),
             #[cfg(test)]
-            GroveTransport::Test(t) => t.list_issues(),
+            GroveTransport::Test(t) => t.list_issues(cached),
+        }
+    }
+
+    fn get_issue(&self, id: &str) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.get_issue(id),
+            GroveTransport::Socket(t) => t.get_issue(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_issue(id),
+        }
+    }
+
+    fn create_issue(
+        &self,
+        title: &str,
+        body: Option<&str>,
+        labels: Vec<String>,
+        priority: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.create_issue(title, body, labels, priority),
+            GroveTransport::Socket(t) => t.create_issue(title, body, labels, priority),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.create_issue(title, body, labels, priority),
+        }
+    }
+
+    fn close_issue(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.close_issue(id),
+            GroveTransport::Socket(t) => t.close_issue(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.close_issue(id),
+        }
+    }
+
+    fn search_issues(
+        &self,
+        query: &str,
+        limit: u32,
+        provider: Option<&str>,
+    ) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.search_issues(query, limit, provider),
+            GroveTransport::Socket(t) => t.search_issues(query, limit, provider),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.search_issues(query, limit, provider),
+        }
+    }
+
+    fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value> {
+        match self {
+            GroveTransport::Direct(t) => t.sync_issues(provider, full),
+            GroveTransport::Socket(t) => t.sync_issues(provider, full),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.sync_issues(provider, full),
         }
     }
 
@@ -393,8 +465,39 @@ impl Transport for TestTransport {
         Ok(vec![])
     }
 
-    fn list_issues(&self) -> CliResult<Vec<serde_json::Value>> {
+    fn list_issues(&self, _cached: bool) -> CliResult<Vec<serde_json::Value>> {
         Ok(vec![])
+    }
+
+    fn get_issue(&self, _id: &str) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn create_issue(
+        &self,
+        _title: &str,
+        _body: Option<&str>,
+        _labels: Vec<String>,
+        _priority: Option<&str>,
+    ) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn close_issue(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn search_issues(
+        &self,
+        _query: &str,
+        _limit: u32,
+        _provider: Option<&str>,
+    ) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn sync_issues(&self, _provider: Option<&str>, _full: bool) -> CliResult<serde_json::Value> {
+        Ok(serde_json::Value::Null)
     }
 
     fn queue_task(
