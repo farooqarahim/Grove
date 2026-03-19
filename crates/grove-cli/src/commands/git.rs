@@ -446,37 +446,155 @@ fn undo_cmd(project: &Path, mode: OutputMode) -> CliResult<()> {
 // ── pr ────────────────────────────────────────────────────────────────────────
 
 fn pr_cmd(
-    _project: &Path,
-    _title: Option<String>,
-    _body: Option<String>,
-    _base: Option<String>,
-    _push: bool,
-    _mode: OutputMode,
+    project: &Path,
+    title: Option<String>,
+    body: Option<String>,
+    base: Option<String>,
+    push: bool,
+    mode: OutputMode,
 ) -> CliResult<()> {
-    Err(CliError::Other(
-        "grove git pr: not yet available — use `gh pr create` directly.".into(),
-    ))
+    if push {
+        run_git(
+            project,
+            vec![
+                "push".to_string(),
+                "--set-upstream".to_string(),
+                "origin".to_string(),
+                "HEAD".to_string(),
+            ],
+        )?;
+    }
+
+    let mut args = vec!["pr".to_string(), "create".to_string()];
+    if let Some(ref t) = title {
+        args.extend(["--title".to_string(), t.clone()]);
+    }
+    if let Some(ref b) = body {
+        args.extend(["--body".to_string(), b.clone()]);
+    }
+    if let Some(ref base_branch) = base {
+        args.extend(["--base".to_string(), base_branch.clone()]);
+    }
+
+    let output = std::process::Command::new("gh")
+        .args(&args)
+        .current_dir(project)
+        .output()
+        .map_err(|e| CliError::Other(format!("gh not found: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(CliError::Other(format!("gh pr create failed: {stderr}")));
+    }
+
+    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    match mode {
+        OutputMode::Json => {
+            println!("{}", json::emit_json(&serde_json::json!({"url": url})));
+        }
+        OutputMode::Text { .. } => {
+            println!("Pull request created: {url}");
+        }
+    }
+    Ok(())
 }
 
 // ── pr-status ─────────────────────────────────────────────────────────────────
 
-fn pr_status_cmd(_project: &Path, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other(
-        "grove git pr-status: not yet available — use `gh pr view` directly.".into(),
-    ))
+fn pr_status_cmd(project: &Path, mode: OutputMode) -> CliResult<()> {
+    let output = std::process::Command::new("gh")
+        .args([
+            "pr",
+            "view",
+            "--json",
+            "number,title,state,url,headRefName,baseRefName,author",
+        ])
+        .current_dir(project)
+        .output()
+        .map_err(|e| CliError::Other(format!("gh not found: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(CliError::Other(format!("gh pr view failed: {stderr}")));
+    }
+
+    let pr: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| CliError::Other(format!("parse pr view output: {e}")))?;
+
+    match mode {
+        OutputMode::Json => {
+            println!("{}", json::emit_json(&pr));
+        }
+        OutputMode::Text { .. } => {
+            println!(
+                "PR #{}: {}",
+                pr.get("number").and_then(|v| v.as_i64()).unwrap_or(0),
+                pr.get("title").and_then(|v| v.as_str()).unwrap_or("")
+            );
+            println!(
+                "state:  {}",
+                pr.get("state").and_then(|v| v.as_str()).unwrap_or("")
+            );
+            println!(
+                "url:    {}",
+                pr.get("url").and_then(|v| v.as_str()).unwrap_or("")
+            );
+            println!(
+                "branch: {} \u{2192} {}",
+                pr.get("headRefName")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+                pr.get("baseRefName")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+            );
+        }
+    }
+    Ok(())
 }
 
 // ── merge ─────────────────────────────────────────────────────────────────────
 
 fn merge_cmd(
-    _project: &Path,
-    _strategy: Option<MergeStrategy>,
-    _admin: bool,
-    _mode: OutputMode,
+    project: &Path,
+    strategy: Option<MergeStrategy>,
+    admin: bool,
+    mode: OutputMode,
 ) -> CliResult<()> {
-    Err(CliError::Other(
-        "grove git merge: not yet available — use `gh pr merge` directly.".into(),
-    ))
+    let mut args = vec!["pr".to_string(), "merge".to_string()];
+    match strategy {
+        Some(MergeStrategy::Squash) => args.push("--squash".to_string()),
+        Some(MergeStrategy::Rebase) => args.push("--rebase".to_string()),
+        Some(MergeStrategy::Merge) | None => args.push("--merge".to_string()),
+    }
+    if admin {
+        args.push("--admin".to_string());
+    }
+    args.push("--delete-branch".to_string());
+
+    let output = std::process::Command::new("gh")
+        .args(&args)
+        .current_dir(project)
+        .output()
+        .map_err(|e| CliError::Other(format!("gh not found: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(CliError::Other(format!("gh pr merge failed: {stderr}")));
+    }
+
+    match mode {
+        OutputMode::Json => {
+            println!(
+                "{}",
+                json::emit_json(&serde_json::json!({"merged": true}))
+            );
+        }
+        OutputMode::Text { .. } => {
+            println!("Pull request merged.");
+        }
+    }
+    Ok(())
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -691,10 +809,16 @@ mod tests {
         );
     }
 
-    // ── stub commands ─────────────────────────────────────────────────────────
+    // ── pr / pr-status / merge ────────────────────────────────────────────────
+    // These commands delegate to `gh` (GitHub CLI).  In CI / test environments
+    // `gh` may not be authenticated or may not have an associated PR, so we
+    // only verify that the commands return an error in those conditions rather
+    // than asserting a specific error message.
 
     #[test]
-    fn pr_cmd_returns_not_yet_available_error() {
+    fn pr_cmd_without_gh_or_repo_returns_err() {
+        // A plain temp-dir has no git remote and no PR — `gh pr create` will
+        // fail, which means we expect Err.
         let dir = tempdir().unwrap();
         let result = pr_cmd(
             dir.path(),
@@ -705,22 +829,17 @@ mod tests {
             OutputMode::Text { no_color: true },
         );
         assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("not yet available"),
-            "expected 'not yet available' in: {msg}"
-        );
     }
 
     #[test]
-    fn pr_status_cmd_returns_not_yet_available_error() {
+    fn pr_status_cmd_without_gh_or_pr_returns_err() {
         let dir = tempdir().unwrap();
         let result = pr_status_cmd(dir.path(), OutputMode::Text { no_color: true });
         assert!(result.is_err());
     }
 
     #[test]
-    fn merge_cmd_returns_not_yet_available_error() {
+    fn merge_cmd_without_gh_or_pr_returns_err() {
         let dir = tempdir().unwrap();
         let result = merge_cmd(dir.path(), None, false, OutputMode::Text { no_color: true });
         assert!(result.is_err());

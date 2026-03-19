@@ -28,8 +28,7 @@ pub struct ProjectDeleteArgs {
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
-pub fn dispatch(a: ProjectArgs, _p: &Path, t: GroveTransport, m: OutputMode) -> CliResult<()> {
-    // _p: reserved for open_folder/clone/ssh commands (future tasks)
+pub fn dispatch(a: ProjectArgs, p: &Path, t: GroveTransport, m: OutputMode) -> CliResult<()> {
     match a.action {
         ProjectAction::Show => show_cmd(t, m),
         ProjectAction::List => list_cmd(t, m),
@@ -52,13 +51,33 @@ pub fn dispatch(a: ProjectArgs, _p: &Path, t: GroveTransport, m: OutputMode) -> 
         ),
         ProjectAction::Archive { id } => archive_cmd(ProjectArchiveArgs { id }, t, m),
         ProjectAction::Delete { id } => delete_cmd(ProjectDeleteArgs { id }, t, m),
-        ProjectAction::OpenFolder { .. } => open_folder_cmd(t, m),
-        ProjectAction::Clone { .. } => clone_cmd(t, m),
-        ProjectAction::CreateRepo { .. } => create_repo_cmd(t, m),
-        ProjectAction::ForkRepo { .. } => fork_repo_cmd(t, m),
-        ProjectAction::ForkFolder { .. } => fork_folder_cmd(t, m),
-        ProjectAction::Ssh { .. } => ssh_cmd(t, m),
-        ProjectAction::SshShell { .. } => ssh_shell_cmd(t, m),
+        ProjectAction::OpenFolder { path, name } => open_folder_cmd(p, path, name, m),
+        ProjectAction::Clone { repo, path, name } => clone_cmd(p, repo, path, name, m),
+        ProjectAction::CreateRepo {
+            repo,
+            path,
+            provider,
+            visibility,
+            gitignore,
+        } => create_repo_cmd(p, repo, path, provider, visibility, gitignore, m),
+        ProjectAction::ForkRepo {
+            src,
+            target,
+            repo,
+            provider,
+        } => fork_repo_cmd(p, src, target, repo, provider, m),
+        ProjectAction::ForkFolder {
+            src,
+            target,
+            preserve_git,
+        } => fork_folder_cmd(p, src, target, preserve_git, m),
+        ProjectAction::Ssh {
+            host,
+            remote_path,
+            user,
+            port,
+        } => ssh_cmd(p, host, remote_path, user, port, m),
+        ProjectAction::SshShell { id } => ssh_shell_cmd(p, id, m),
     }
 }
 
@@ -223,34 +242,224 @@ pub fn delete_cmd(
     Ok(())
 }
 
-// ── stubs ─────────────────────────────────────────────────────────────────────
+// ── open-folder ───────────────────────────────────────────────────────────────
 
-pub fn open_folder_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+pub fn open_folder_cmd(
+    project: &Path,
+    path: String,
+    name: Option<String>,
+    mode: OutputMode,
+) -> CliResult<()> {
+    let row = grove_core::orchestrator::create_project_from_source(
+        project,
+        grove_core::orchestrator::ProjectCreateRequest::OpenFolder {
+            root_path: path,
+            name,
+        },
+    )
+    .map_err(CliError::Core)?;
+
+    emit_project_created(&row, mode)
 }
 
-pub fn clone_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── clone ─────────────────────────────────────────────────────────────────────
+
+pub fn clone_cmd(
+    project: &Path,
+    repo: String,
+    target_path: String,
+    name: Option<String>,
+    mode: OutputMode,
+) -> CliResult<()> {
+    let row = grove_core::orchestrator::create_project_from_source(
+        project,
+        grove_core::orchestrator::ProjectCreateRequest::CloneGitRepo {
+            repo_url: repo,
+            target_path,
+            name,
+        },
+    )
+    .map_err(CliError::Core)?;
+
+    emit_project_created(&row, mode)
 }
 
-pub fn create_repo_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── create-repo ───────────────────────────────────────────────────────────────
+
+pub fn create_repo_cmd(
+    project: &Path,
+    repo: String,
+    path: String,
+    provider: Option<String>,
+    visibility: Option<String>,
+    gitignore: Option<String>,
+    mode: OutputMode,
+) -> CliResult<()> {
+    let row = grove_core::orchestrator::create_project_from_source(
+        project,
+        grove_core::orchestrator::ProjectCreateRequest::CreateRepo {
+            provider: provider.unwrap_or_else(|| "github".to_string()),
+            repo_name: repo,
+            target_path: path,
+            owner: None,
+            visibility: visibility.unwrap_or_else(|| "private".to_string()),
+            gitignore_template: gitignore,
+            gitignore_entries: vec![],
+            name: None,
+        },
+    )
+    .map_err(CliError::Core)?;
+
+    emit_project_created(&row, mode)
 }
 
-pub fn fork_repo_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── fork-repo ─────────────────────────────────────────────────────────────────
+
+pub fn fork_repo_cmd(
+    project: &Path,
+    src: String,
+    target: String,
+    repo: String,
+    provider: Option<String>,
+    mode: OutputMode,
+) -> CliResult<()> {
+    let row = grove_core::orchestrator::create_project_from_source(
+        project,
+        grove_core::orchestrator::ProjectCreateRequest::ForkRepoToRemote {
+            provider: provider.unwrap_or_else(|| "github".to_string()),
+            source_path: src,
+            target_path: target,
+            repo_name: repo,
+            owner: None,
+            visibility: "private".to_string(),
+            remote_name: None,
+            name: None,
+        },
+    )
+    .map_err(CliError::Core)?;
+
+    emit_project_created(&row, mode)
 }
 
-pub fn fork_folder_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── fork-folder ───────────────────────────────────────────────────────────────
+
+pub fn fork_folder_cmd(
+    project: &Path,
+    src: String,
+    target: String,
+    preserve_git: bool,
+    mode: OutputMode,
+) -> CliResult<()> {
+    let row = grove_core::orchestrator::create_project_from_source(
+        project,
+        grove_core::orchestrator::ProjectCreateRequest::ForkFolderToFolder {
+            source_path: src,
+            target_path: target,
+            preserve_git,
+            name: None,
+        },
+    )
+    .map_err(CliError::Core)?;
+
+    emit_project_created(&row, mode)
 }
 
-pub fn ssh_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── ssh ───────────────────────────────────────────────────────────────────────
+
+pub fn ssh_cmd(
+    project: &Path,
+    host: String,
+    remote_path: String,
+    user: Option<String>,
+    port: Option<u16>,
+    mode: OutputMode,
+) -> CliResult<()> {
+    let row = grove_core::orchestrator::create_project_from_source(
+        project,
+        grove_core::orchestrator::ProjectCreateRequest::Ssh {
+            host,
+            remote_path,
+            user,
+            port,
+            name: None,
+        },
+    )
+    .map_err(CliError::Core)?;
+
+    emit_project_created(&row, mode)
 }
 
-pub fn ssh_shell_cmd(_transport: GroveTransport, _mode: OutputMode) -> CliResult<()> {
-    Err(CliError::Other("not yet implemented".into()))
+// ── ssh-shell ─────────────────────────────────────────────────────────────────
+
+pub fn ssh_shell_cmd(project: &Path, id: Option<String>, _mode: OutputMode) -> CliResult<()> {
+    let project_row = match id {
+        Some(ref pid) => grove_core::orchestrator::list_projects(project)
+            .map_err(CliError::Core)?
+            .into_iter()
+            .find(|p| p.id == *pid || p.id.starts_with(pid.as_str()))
+            .ok_or_else(|| CliError::NotFound(format!("project {pid}")))?,
+        None => grove_core::orchestrator::get_project(project).map_err(CliError::Core)?,
+    };
+
+    if project_row.source_kind != "ssh" {
+        return Err(CliError::BadArg("project is not an SSH project".into()));
+    }
+
+    let ssh_url = &project_row.root_path;
+    let (user_host, remote_path) = parse_ssh_url(ssh_url)?;
+
+    let status = std::process::Command::new("ssh")
+        .arg(&user_host)
+        .arg(&remote_path)
+        .status()
+        .map_err(|e| CliError::Other(format!("ssh: {e}")))?;
+
+    if !status.success() {
+        return Err(CliError::Other(format!("ssh exited with {status}")));
+    }
+    Ok(())
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+/// Parse an SSH URL of the form `ssh://[user@]host[:port]/remote_path`
+/// into `("user@host:port", "/remote_path")`.
+fn parse_ssh_url(url: &str) -> CliResult<(String, String)> {
+    let rest = url
+        .strip_prefix("ssh://")
+        .ok_or_else(|| CliError::BadArg(format!("invalid ssh URL (expected ssh://...): {url}")))?;
+
+    // Split authority from path at the first '/'.
+    let (authority, path) = rest.split_once('/').ok_or_else(|| {
+        CliError::BadArg(format!(
+            "invalid ssh URL (no path component after authority): {url}"
+        ))
+    })?;
+
+    // authority is [user@]host[:port]
+    // We pass it verbatim to ssh as the destination and prefix '/' back onto path.
+    Ok((authority.to_string(), format!("/{path}")))
+}
+
+fn emit_project_created(
+    row: &grove_core::db::repositories::projects_repo::ProjectRow,
+    mode: OutputMode,
+) -> CliResult<()> {
+    match mode {
+        OutputMode::Json => {
+            let val =
+                serde_json::to_value(row).map_err(|e| CliError::Other(e.to_string()))?;
+            println!("{}", json_out::emit_json(&val));
+        }
+        OutputMode::Text { .. } => {
+            println!(
+                "created project {} at {}",
+                row.id.chars().take(8).collect::<String>(),
+                &row.root_path
+            );
+        }
+    }
+    Ok(())
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -314,8 +523,39 @@ mod tests {
     }
 
     #[test]
-    fn project_open_folder_returns_not_implemented() {
-        let t = GroveTransport::Test(TestTransport::default());
-        assert!(open_folder_cmd(t, crate::output::OutputMode::Text { no_color: true }).is_err());
+    fn project_open_folder_nonexistent_returns_err() {
+        let project_dir = tempfile::tempdir().unwrap();
+        // Path that does not exist — grove-core must return an error.
+        let result = open_folder_cmd(
+            project_dir.path(),
+            "/nonexistent/path/that/cannot/exist".to_string(),
+            None,
+            crate::output::OutputMode::Text { no_color: true },
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_ssh_url_full() {
+        let (host, path) = parse_ssh_url("ssh://user@host:2222/home/user").unwrap();
+        assert_eq!(host, "user@host:2222");
+        assert_eq!(path, "/home/user");
+    }
+
+    #[test]
+    fn parse_ssh_url_no_user_no_port() {
+        let (host, path) = parse_ssh_url("ssh://myhost/var/www").unwrap();
+        assert_eq!(host, "myhost");
+        assert_eq!(path, "/var/www");
+    }
+
+    #[test]
+    fn parse_ssh_url_invalid_scheme_returns_err() {
+        assert!(parse_ssh_url("http://host/path").is_err());
+    }
+
+    #[test]
+    fn parse_ssh_url_no_path_returns_err() {
+        assert!(parse_ssh_url("ssh://host").is_err());
     }
 }
