@@ -23,9 +23,21 @@ pub fn dispatch(a: LlmArgs, t: GroveTransport, m: OutputMode) -> CliResult<()> {
         LlmAction::Select {
             provider,
             model,
-            own_key: _,
-            workspace_credits: _,
-        } => select_cmd(LlmSelectArgs { provider, model }, t, m),
+            own_key,
+            workspace_credits,
+        } => {
+            if own_key {
+                eprintln!(
+                    "warning: --own-key is not yet supported; flag will be enabled in a future release"
+                );
+            }
+            if workspace_credits {
+                eprintln!(
+                    "warning: --workspace-credits is not yet supported; flag will be enabled in a future release"
+                );
+            }
+            select_cmd(LlmSelectArgs { provider, model }, t, m)
+        }
     }
 }
 

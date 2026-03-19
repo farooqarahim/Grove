@@ -154,7 +154,7 @@ impl Transport for DirectTransport {
                     AuthStore::get(s.kind.id())
                         .map(|info| match info {
                             AuthInfo::Api { key } => {
-                                let prefix: String = key.chars().take(8).collect();
+                                let prefix: String = key.chars().take(4).collect();
                                 format!("{prefix}...")
                             }
                             AuthInfo::WorkspaceCredits => "workspace-credits".to_string(),

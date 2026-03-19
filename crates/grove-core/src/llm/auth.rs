@@ -90,8 +90,8 @@ impl AuthStore {
 
 /// Write `data` to `path` as pretty JSON with `0o600` permissions.
 fn write_secure(path: &PathBuf, data: &HashMap<String, AuthInfo>) -> std::io::Result<()> {
-    let json = serde_json::to_string_pretty(data)
-        .map_err(std::io::Error::other)?;
+    // SECURITY: do not interpolate key material into io::Error messages
+    let json = serde_json::to_string_pretty(data).map_err(std::io::Error::other)?;
     fs::write(path, json)?;
     #[cfg(unix)]
     {
