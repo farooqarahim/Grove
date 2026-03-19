@@ -132,6 +132,13 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                 table_state.select(Some(state.selected_agent));
             }
 
+            // Clamp scroll_offset before draw to handle log shrinkage between refreshes.
+            if state.log_lines.is_empty() {
+                state.scroll_offset = 0;
+            } else {
+                let max = (state.log_lines.len().saturating_sub(1)) as u16;
+                state.scroll_offset = state.scroll_offset.min(max);
+            }
             terminal
                 .draw(|f| draw(f, &mut state, &mut table_state))
                 .map_err(|e| crate::error::CliError::Other(e.to_string()))?;
@@ -173,6 +180,13 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                 let terminal_states = ["completed", "failed", "aborted"];
                 if terminal_states.contains(&run.state.as_str()) {
                     state.done = true;
+                    // Clamp scroll_offset before the final draw as well.
+                    if state.log_lines.is_empty() {
+                        state.scroll_offset = 0;
+                    } else {
+                        let max = (state.log_lines.len().saturating_sub(1)) as u16;
+                        state.scroll_offset = state.scroll_offset.min(max);
+                    }
                     terminal
                         .draw(|f| draw(f, &mut state, &mut table_state))
                         .ok();
@@ -284,6 +298,7 @@ fn draw(f: &mut Frame<'_>, state: &mut RunWatchState, table_state: &mut TableSta
 #[cfg(feature = "tui")]
 pub struct StatusWatchApp {
     pub runs: Vec<grove_core::orchestrator::RunRecord>,
+    pub last_error: Option<String>,
     transport: GroveTransport,
 }
 
@@ -292,6 +307,7 @@ impl StatusWatchApp {
     pub fn new(transport: GroveTransport) -> Self {
         Self {
             runs: vec![],
+            last_error: None,
             transport,
         }
     }
@@ -325,13 +341,25 @@ pub fn run_status_watch(transport: GroveTransport) -> crate::error::CliResult<()
     let result = (|| -> crate::error::CliResult<()> {
         loop {
             if last_refresh.elapsed() >= poll_interval {
-                app.runs = app.transport.list_runs(20).unwrap_or_default();
+                match app.transport.list_runs(20) {
+                    Ok(runs) => {
+                        app.runs = runs;
+                        app.last_error = None;
+                    }
+                    Err(e) => {
+                        app.last_error = Some(e.to_string());
+                    }
+                }
                 last_refresh = Instant::now();
             }
 
             terminal
                 .draw(|f| {
                     let area = f.size();
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Min(0), Constraint::Length(1)])
+                        .split(area);
                     let rows: Vec<Row> = app
                         .runs
                         .iter()
@@ -351,11 +379,16 @@ pub fn run_status_watch(transport: GroveTransport) -> crate::error::CliResult<()
                         ],
                     )
                     .header(
-                        Row::new(["ID", "OBJECTIVE", "STATE"])
-                            .style(Style::default().fg(ACCENT)),
+                        Row::new(["ID", "OBJECTIVE", "STATE"]).style(Style::default().fg(ACCENT)),
                     )
                     .block(titled_block("Grove — Status Watch"));
-                    f.render_widget(table, area);
+                    f.render_widget(table, chunks[0]);
+                    if let Some(ref err) = app.last_error {
+                        let err_para =
+                            ratatui::widgets::Paragraph::new(format!("Transport error: {err}"))
+                                .style(Style::default().fg(Color::Red));
+                        f.render_widget(err_para, chunks[1]);
+                    }
                 })
                 .map_err(|e| crate::error::CliError::Other(e.to_string()))?;
 

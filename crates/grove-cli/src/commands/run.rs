@@ -168,7 +168,10 @@ mod tests {
             // Without tui feature, --watch triggers an error before the
             // start_run call, but TestTransport::start_run itself also returns
             // an error — either way the result must be an error.
-            let _ = result;
+            assert!(
+                result.is_err(),
+                "expected run_cmd with --watch to return an error in non-tui builds"
+            );
         }
     }
 
