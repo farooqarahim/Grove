@@ -230,4 +230,67 @@ impl Transport for SocketTransport {
     ) -> CliResult<serde_json::Value> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
+
+    fn set_workspace_name(&self, _name: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn archive_workspace(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn delete_workspace(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_project(
+        &self,
+    ) -> CliResult<Option<grove_core::db::repositories::projects_repo::ProjectRow>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn set_project_name(&self, _name: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn set_project_settings(
+        &self,
+        _provider: Option<&str>,
+        _parallel: Option<i64>,
+        _pipeline: Option<&str>,
+        _permission_mode: Option<&str>,
+    ) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn archive_project(&self, _id: Option<&str>) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn delete_project(&self, _id: Option<&str>) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn get_conversation(
+        &self,
+        _id: &str,
+    ) -> CliResult<Option<grove_core::db::repositories::conversations_repo::ConversationRow>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn archive_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn delete_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn rebase_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn merge_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
 }

@@ -32,20 +32,24 @@ impl Transport for DirectTransport {
     fn get_workspace(
         &self,
     ) -> CliResult<Option<grove_core::db::repositories::workspaces_repo::WorkspaceRow>> {
-        Err(CliError::Other("not yet implemented".into()))
+        match grove_core::orchestrator::get_workspace(&self.project) {
+            Ok(row) => Ok(Some(row)),
+            Err(grove_core::GroveError::NotFound(_)) => Ok(None),
+            Err(e) => Err(CliError::Core(e)),
+        }
     }
 
     fn list_projects(
         &self,
     ) -> CliResult<Vec<grove_core::db::repositories::projects_repo::ProjectRow>> {
-        Err(CliError::Other("not yet implemented".into()))
+        grove_core::orchestrator::list_projects(&self.project).map_err(CliError::Core)
     }
 
     fn list_conversations(
         &self,
-        _: i64,
+        limit: i64,
     ) -> CliResult<Vec<grove_core::db::repositories::conversations_repo::ConversationRow>> {
-        Err(CliError::Other("not yet implemented".into()))
+        grove_core::orchestrator::list_conversations(&self.project, limit).map_err(CliError::Core)
     }
 
     fn list_issues(&self, _cached: bool) -> CliResult<Vec<serde_json::Value>> {
@@ -321,6 +325,120 @@ impl Transport for DirectTransport {
         _model: Option<&str>,
     ) -> CliResult<serde_json::Value> {
         Err(CliError::Other("not yet available".into()))
+    }
+
+    fn set_workspace_name(&self, name: &str) -> CliResult<()> {
+        grove_core::orchestrator::update_workspace_name(&self.project, name).map_err(CliError::Core)
+    }
+
+    fn archive_workspace(&self, id: &str) -> CliResult<()> {
+        grove_core::orchestrator::archive_workspace(&self.project, id).map_err(CliError::Core)
+    }
+
+    fn delete_workspace(&self, id: &str) -> CliResult<()> {
+        grove_core::orchestrator::delete_workspace(&self.project, id).map_err(CliError::Core)
+    }
+
+    fn get_project(
+        &self,
+    ) -> CliResult<Option<grove_core::db::repositories::projects_repo::ProjectRow>> {
+        match grove_core::orchestrator::get_project(&self.project) {
+            Ok(row) => Ok(Some(row)),
+            Err(grove_core::GroveError::NotFound(_)) => Ok(None),
+            Err(e) => Err(CliError::Core(e)),
+        }
+    }
+
+    fn set_project_name(&self, name: &str) -> CliResult<()> {
+        // Resolve the current project id then rename it.
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        grove_core::orchestrator::update_project_name(&self.project, &project.id, name)
+            .map_err(CliError::Core)
+    }
+
+    fn set_project_settings(
+        &self,
+        provider: Option<&str>,
+        parallel: Option<i64>,
+        pipeline: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> CliResult<()> {
+        let project =
+            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+        let mut settings =
+            grove_core::orchestrator::get_project_settings(&self.project, &project.id)
+                .map_err(CliError::Core)?;
+        if let Some(p) = provider {
+            settings.default_provider = Some(p.to_string());
+        }
+        if let Some(n) = parallel {
+            settings.max_parallel_agents = Some(n);
+        }
+        if let Some(pl) = pipeline {
+            settings.default_pipeline = Some(pl.to_string());
+        }
+        if let Some(pm) = permission_mode {
+            settings.default_permission_mode = Some(pm.to_string());
+        }
+        grove_core::orchestrator::update_project_settings(&self.project, &project.id, &settings)
+            .map_err(CliError::Core)
+    }
+
+    fn archive_project(&self, id: Option<&str>) -> CliResult<()> {
+        let project_id = match id {
+            Some(i) => i.to_string(),
+            None => {
+                grove_core::orchestrator::get_project(&self.project)
+                    .map_err(CliError::Core)?
+                    .id
+            }
+        };
+        grove_core::orchestrator::archive_project(&self.project, &project_id)
+            .map_err(CliError::Core)
+    }
+
+    fn delete_project(&self, id: Option<&str>) -> CliResult<()> {
+        let project_id = match id {
+            Some(i) => i.to_string(),
+            None => {
+                grove_core::orchestrator::get_project(&self.project)
+                    .map_err(CliError::Core)?
+                    .id
+            }
+        };
+        grove_core::orchestrator::delete_project(&self.project, &project_id).map_err(CliError::Core)
+    }
+
+    fn get_conversation(
+        &self,
+        id: &str,
+    ) -> CliResult<Option<grove_core::db::repositories::conversations_repo::ConversationRow>> {
+        match grove_core::orchestrator::get_conversation(&self.project, id) {
+            Ok(row) => Ok(Some(row)),
+            Err(grove_core::GroveError::NotFound(_)) => Ok(None),
+            Err(e) => Err(CliError::Core(e)),
+        }
+    }
+
+    fn archive_conversation(&self, id: &str) -> CliResult<()> {
+        grove_core::orchestrator::archive_conversation(&self.project, id).map_err(CliError::Core)
+    }
+
+    fn delete_conversation(&self, id: &str) -> CliResult<()> {
+        grove_core::orchestrator::delete_conversation(&self.project, id).map_err(CliError::Core)
+    }
+
+    fn rebase_conversation(&self, id: &str) -> CliResult<()> {
+        grove_core::orchestrator::rebase_conversation(&self.project, id)
+            .map(|_| ())
+            .map_err(CliError::Core)
+    }
+
+    fn merge_conversation(&self, id: &str) -> CliResult<()> {
+        grove_core::orchestrator::merge_conversation(&self.project, id)
+            .map(|_| ())
+            .map_err(CliError::Core)
     }
 
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {

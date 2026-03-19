@@ -145,7 +145,37 @@ pub trait Transport {
         fix: bool,
         model: Option<&str>,
     ) -> CliResult<serde_json::Value>;
-    // Tasks 14–15 add more methods here. Update all 3 impls + TestTransport each time.
+
+    // ── Task 14 workspace mutation methods ───────────────────────────────────
+    fn set_workspace_name(&self, name: &str) -> CliResult<()>;
+    fn archive_workspace(&self, id: &str) -> CliResult<()>;
+    fn delete_workspace(&self, id: &str) -> CliResult<()>;
+
+    // ── Task 14 project read/mutation methods ─────────────────────────────
+    fn get_project(
+        &self,
+    ) -> CliResult<Option<grove_core::db::repositories::projects_repo::ProjectRow>>;
+    fn set_project_name(&self, name: &str) -> CliResult<()>;
+    fn set_project_settings(
+        &self,
+        provider: Option<&str>,
+        parallel: Option<i64>,
+        pipeline: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> CliResult<()>;
+    fn archive_project(&self, id: Option<&str>) -> CliResult<()>;
+    fn delete_project(&self, id: Option<&str>) -> CliResult<()>;
+
+    // ── Task 14 conversation read/mutation methods ─────────────────────────
+    fn get_conversation(
+        &self,
+        id: &str,
+    ) -> CliResult<Option<grove_core::db::repositories::conversations_repo::ConversationRow>>;
+    fn archive_conversation(&self, id: &str) -> CliResult<()>;
+    fn delete_conversation(&self, id: &str) -> CliResult<()>;
+    fn rebase_conversation(&self, id: &str) -> CliResult<()>;
+    fn merge_conversation(&self, id: &str) -> CliResult<()>;
+    // Tasks 15+ add more methods here. Update all 3 impls + TestTransport each time.
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -609,6 +639,140 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.run_ci(branch, wait, timeout, fix, model),
         }
     }
+
+    fn set_workspace_name(&self, name: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.set_workspace_name(name),
+            GroveTransport::Socket(t) => t.set_workspace_name(name),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.set_workspace_name(name),
+        }
+    }
+
+    fn archive_workspace(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.archive_workspace(id),
+            GroveTransport::Socket(t) => t.archive_workspace(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.archive_workspace(id),
+        }
+    }
+
+    fn delete_workspace(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.delete_workspace(id),
+            GroveTransport::Socket(t) => t.delete_workspace(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.delete_workspace(id),
+        }
+    }
+
+    fn get_project(
+        &self,
+    ) -> CliResult<Option<grove_core::db::repositories::projects_repo::ProjectRow>> {
+        match self {
+            GroveTransport::Direct(t) => t.get_project(),
+            GroveTransport::Socket(t) => t.get_project(),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_project(),
+        }
+    }
+
+    fn set_project_name(&self, name: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.set_project_name(name),
+            GroveTransport::Socket(t) => t.set_project_name(name),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.set_project_name(name),
+        }
+    }
+
+    fn set_project_settings(
+        &self,
+        provider: Option<&str>,
+        parallel: Option<i64>,
+        pipeline: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => {
+                t.set_project_settings(provider, parallel, pipeline, permission_mode)
+            }
+            GroveTransport::Socket(t) => {
+                t.set_project_settings(provider, parallel, pipeline, permission_mode)
+            }
+            #[cfg(test)]
+            GroveTransport::Test(t) => {
+                t.set_project_settings(provider, parallel, pipeline, permission_mode)
+            }
+        }
+    }
+
+    fn archive_project(&self, id: Option<&str>) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.archive_project(id),
+            GroveTransport::Socket(t) => t.archive_project(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.archive_project(id),
+        }
+    }
+
+    fn delete_project(&self, id: Option<&str>) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.delete_project(id),
+            GroveTransport::Socket(t) => t.delete_project(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.delete_project(id),
+        }
+    }
+
+    fn get_conversation(
+        &self,
+        id: &str,
+    ) -> CliResult<Option<grove_core::db::repositories::conversations_repo::ConversationRow>> {
+        match self {
+            GroveTransport::Direct(t) => t.get_conversation(id),
+            GroveTransport::Socket(t) => t.get_conversation(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.get_conversation(id),
+        }
+    }
+
+    fn archive_conversation(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.archive_conversation(id),
+            GroveTransport::Socket(t) => t.archive_conversation(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.archive_conversation(id),
+        }
+    }
+
+    fn delete_conversation(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.delete_conversation(id),
+            GroveTransport::Socket(t) => t.delete_conversation(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.delete_conversation(id),
+        }
+    }
+
+    fn rebase_conversation(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.rebase_conversation(id),
+            GroveTransport::Socket(t) => t.rebase_conversation(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.rebase_conversation(id),
+        }
+    }
+
+    fn merge_conversation(&self, id: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.merge_conversation(id),
+            GroveTransport::Socket(t) => t.merge_conversation(id),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.merge_conversation(id),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -822,6 +986,69 @@ impl Transport for TestTransport {
         _fix: bool,
         _model: Option<&str>,
     ) -> CliResult<serde_json::Value> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn set_workspace_name(&self, _name: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn archive_workspace(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn delete_workspace(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn get_project(
+        &self,
+    ) -> CliResult<Option<grove_core::db::repositories::projects_repo::ProjectRow>> {
+        Ok(None)
+    }
+
+    fn set_project_name(&self, _name: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn set_project_settings(
+        &self,
+        _provider: Option<&str>,
+        _parallel: Option<i64>,
+        _pipeline: Option<&str>,
+        _permission_mode: Option<&str>,
+    ) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn archive_project(&self, _id: Option<&str>) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn delete_project(&self, _id: Option<&str>) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn get_conversation(
+        &self,
+        _id: &str,
+    ) -> CliResult<Option<grove_core::db::repositories::conversations_repo::ConversationRow>> {
+        Ok(None)
+    }
+
+    fn archive_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn delete_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn rebase_conversation(&self, _id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn merge_conversation(&self, _id: &str) -> CliResult<()> {
         Err(CliError::Other("not implemented".into()))
     }
 }
