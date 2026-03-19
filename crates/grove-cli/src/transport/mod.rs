@@ -1,9 +1,9 @@
 pub mod direct;
 pub mod socket;
 
-use crate::error::CliResult;
 #[cfg(test)]
 use crate::error::CliError;
+use crate::error::CliResult;
 
 // ── Verified grove-core type paths ──────────────────────────────────────────
 // grove_core::orchestrator::RunRecord    — orchestrator/mod.rs
@@ -39,6 +39,7 @@ pub struct StartRunRequest {
 /// Result returned by `start_run` — sourced from the newly-queued TaskRecord.
 pub struct RunResult {
     pub run_id: String,
+    #[allow(dead_code)]
     pub task_id: String,
     pub state: String,
     pub objective: String,
@@ -178,16 +179,31 @@ impl Transport for GroveTransport {
         permission_mode: Option<&str>,
     ) -> CliResult<grove_core::orchestrator::TaskRecord> {
         match self {
-            GroveTransport::Direct(t) => {
-                t.queue_task(objective, priority, model, conversation_id, pipeline, permission_mode)
-            }
-            GroveTransport::Socket(t) => {
-                t.queue_task(objective, priority, model, conversation_id, pipeline, permission_mode)
-            }
+            GroveTransport::Direct(t) => t.queue_task(
+                objective,
+                priority,
+                model,
+                conversation_id,
+                pipeline,
+                permission_mode,
+            ),
+            GroveTransport::Socket(t) => t.queue_task(
+                objective,
+                priority,
+                model,
+                conversation_id,
+                pipeline,
+                permission_mode,
+            ),
             #[cfg(test)]
-            GroveTransport::Test(t) => {
-                t.queue_task(objective, priority, model, conversation_id, pipeline, permission_mode)
-            }
+            GroveTransport::Test(t) => t.queue_task(
+                objective,
+                priority,
+                model,
+                conversation_id,
+                pipeline,
+                permission_mode,
+            ),
         }
     }
 
