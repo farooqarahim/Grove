@@ -447,8 +447,7 @@ fn emit_project_created(
 ) -> CliResult<()> {
     match mode {
         OutputMode::Json => {
-            let val =
-                serde_json::to_value(row).map_err(|e| CliError::Other(e.to_string()))?;
+            let val = serde_json::to_value(row).map_err(|e| CliError::Other(e.to_string()))?;
             println!("{}", json_out::emit_json(&val));
         }
         OutputMode::Text { .. } => {

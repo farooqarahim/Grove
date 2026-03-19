@@ -378,10 +378,7 @@ pub fn conflicts_cmd(a: ConflictsArgs, t: GroveTransport, mode: OutputMode) -> C
     let relevant: Vec<_> = worktrees
         .iter()
         .filter(|w| {
-            let is_active = w
-                .get("active")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let is_active = w.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
             if let Some(ref run_id) = a.show {
                 w.get("run_id")
                     .and_then(|v| v.as_str())
