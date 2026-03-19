@@ -29,6 +29,7 @@ pub struct ProjectDeleteArgs {
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
 pub fn dispatch(a: ProjectArgs, _p: &Path, t: GroveTransport, m: OutputMode) -> CliResult<()> {
+    // _p: reserved for open_folder/clone/ssh commands (future tasks)
     match a.action {
         ProjectAction::Show => show_cmd(t, m),
         ProjectAction::List => list_cmd(t, m),
@@ -42,7 +43,7 @@ pub fn dispatch(a: ProjectArgs, _p: &Path, t: GroveTransport, m: OutputMode) -> 
         } => set_cmd(
             ProjectSetArgs {
                 provider,
-                parallel: parallel.map(|v| v as i64),
+                parallel: parallel.map(i64::from),
                 pipeline,
                 permission_mode,
             },

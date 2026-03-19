@@ -35,12 +35,15 @@ pub fn dispatch(a: ConversationArgs, t: GroveTransport, m: OutputMode) -> CliRes
     match a.action {
         ConversationAction::List { limit } => list_cmd(
             ConversationListArgs {
-                limit: limit as i64,
+                limit: i64::from(limit),
             },
             t,
             m,
         ),
-        ConversationAction::Show { id, .. } => show_cmd(ConversationShowArgs { id }, t, m),
+        ConversationAction::Show { id, limit: _limit } => {
+            // _limit: reserved for future message pagination
+            show_cmd(ConversationShowArgs { id }, t, m)
+        }
         ConversationAction::Archive { id } => archive_cmd(ConversationArchiveArgs { id }, t, m),
         ConversationAction::Delete { id } => delete_cmd(ConversationDeleteArgs { id }, t, m),
         ConversationAction::Rebase { id } => rebase_cmd(ConversationRebaseArgs { id }, t, m),
@@ -111,10 +114,8 @@ pub fn show_cmd(
         }
         OutputMode::Text { .. } => match row {
             None => {
-                println!(
-                    "{}",
-                    text::dim(format!("conversation {} not found", args.id).as_str())
-                );
+                let msg = format!("conversation {} not found", args.id);
+                println!("{}", text::dim(&msg));
             }
             Some(r) => {
                 println!("id:     {}", r.id);
