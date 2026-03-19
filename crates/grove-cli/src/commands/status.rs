@@ -26,8 +26,7 @@ pub fn status_cmd(args: StatusArgs, transport: GroveTransport, mode: OutputMode)
 
     match mode {
         OutputMode::Json => {
-            let val =
-                serde_json::to_value(&runs).map_err(|e| CliError::Other(e.to_string()))?;
+            let val = serde_json::to_value(&runs).map_err(|e| CliError::Other(e.to_string()))?;
             println!("{}", json_out::emit_json(&val));
         }
         OutputMode::Text { .. } => {
@@ -72,13 +71,17 @@ pub fn logs_cmd(args: LogsArgs, transport: GroveTransport, mode: OutputMode) -> 
                 return Ok(());
             }
             for event in &events {
-                let ts = event.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
-                let et = event.get("event_type").and_then(|v| v.as_str()).unwrap_or("");
+                let ts = event
+                    .get("created_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let et = event
+                    .get("event_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let payload = event
                     .get("payload")
-                    .map(|p| {
-                        serde_json::to_string(p).unwrap_or_else(|_| "{}".to_string())
-                    })
+                    .map(|p| serde_json::to_string(p).unwrap_or_else(|_| "{}".to_string()))
                     .unwrap_or_default();
                 println!("{} {} {}", ts, et, payload);
             }
@@ -89,11 +92,7 @@ pub fn logs_cmd(args: LogsArgs, transport: GroveTransport, mode: OutputMode) -> 
 
 // ── report ────────────────────────────────────────────────────────────────────
 
-pub fn report_cmd(
-    args: ReportArgs,
-    transport: GroveTransport,
-    mode: OutputMode,
-) -> CliResult<()> {
+pub fn report_cmd(args: ReportArgs, transport: GroveTransport, mode: OutputMode) -> CliResult<()> {
     let report = transport.get_report(&args.run_id)?;
 
     match mode {
@@ -109,12 +108,9 @@ pub fn report_cmd(
                 .get("total_runs")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0);
-            println!("run_id  : {}", args.run_id);
-            println!(
-                "total cost (all completed runs): ${:.4}",
-                total
-            );
-            println!("total completed runs          : {}", total_runs);
+            println!("Cost Report (all completed runs)");
+            println!("total cost : ${:.4}", total);
+            println!("total runs : {}", total_runs);
 
             if let Some(by_agent) = report.get("by_agent").and_then(|v| v.as_array()) {
                 if !by_agent.is_empty() {
@@ -157,29 +153,15 @@ pub fn plan_cmd(args: PlanArgs, transport: GroveTransport, mode: OutputMode) -> 
                     return Ok(());
                 }
                 for step in steps {
-                    let wave = step
-                        .get("wave")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0);
-                    let idx = step
-                        .get("step_index")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0);
-                    let title = step
-                        .get("title")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let wave = step.get("wave").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let idx = step.get("step_index").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let title = step.get("title").and_then(|v| v.as_str()).unwrap_or("");
                     let agent = step
                         .get("agent_type")
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
-                    let status = step
-                        .get("status")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    println!(
-                        "  [wave {wave}] {idx:>2}. [{agent}] {title}  ({status})"
-                    );
+                    let status = step.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                    println!("  [wave {wave}] {idx:>2}. [{agent}] {title}  ({status})");
                 }
             } else {
                 println!("{}", text::dim("no plan"));
@@ -212,9 +194,18 @@ pub fn subtasks_cmd(
                 .iter()
                 .map(|s| {
                     vec![
-                        s.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        s.get("status").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        s.get("agent_type").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        s.get("title")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        s.get("status")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        s.get("agent_type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         s.get("depends_on")
                             .and_then(|v| v.as_array())
                             .map(|arr| {
@@ -263,10 +254,22 @@ pub fn sessions_cmd(
                             .and_then(|v| v.as_str())
                             .map(|id| id.chars().take(8).collect::<String>())
                             .unwrap_or_default(),
-                        s.get("agent_type").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        s.get("state").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        s.get("started_at").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        s.get("ended_at").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        s.get("agent_type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        s.get("state")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        s.get("started_at")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        s.get("ended_at")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         // cost_usd is not in SessionRecord — leave blank
                         String::new(),
                     ]
@@ -286,10 +289,7 @@ pub fn sessions_cmd(
 pub fn resume_cmd(args: ResumeArgs, transport: GroveTransport, mode: OutputMode) -> CliResult<()> {
     transport.resume_run(&args.run_id)?;
     match mode {
-        OutputMode::Json => println!(
-            "{}",
-            serde_json::json!({"ok": true, "run_id": args.run_id})
-        ),
+        OutputMode::Json => println!("{}", serde_json::json!({"ok": true, "run_id": args.run_id})),
         OutputMode::Text { .. } => println!(
             "resumed {}",
             args.run_id.chars().take(8).collect::<String>()
@@ -303,10 +303,7 @@ pub fn resume_cmd(args: ResumeArgs, transport: GroveTransport, mode: OutputMode)
 pub fn abort_cmd(args: AbortArgs, transport: GroveTransport, mode: OutputMode) -> CliResult<()> {
     transport.abort_run(&args.run_id)?;
     match mode {
-        OutputMode::Json => println!(
-            "{}",
-            serde_json::json!({"ok": true, "run_id": args.run_id})
-        ),
+        OutputMode::Json => println!("{}", serde_json::json!({"ok": true, "run_id": args.run_id})),
         OutputMode::Text { .. } => println!(
             "aborted {}",
             args.run_id.chars().take(8).collect::<String>()
@@ -317,27 +314,15 @@ pub fn abort_cmd(args: AbortArgs, transport: GroveTransport, mode: OutputMode) -
 
 // ── not-yet-implemented stubs ─────────────────────────────────────────────────
 
-pub fn ownership_cmd(
-    _a: OwnershipArgs,
-    _t: GroveTransport,
-    _m: OutputMode,
-) -> CliResult<()> {
+pub fn ownership_cmd(_a: OwnershipArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
     Err(CliError::Other("not yet implemented".into()))
 }
 
-pub fn conflicts_cmd(
-    _a: ConflictsArgs,
-    _t: GroveTransport,
-    _m: OutputMode,
-) -> CliResult<()> {
+pub fn conflicts_cmd(_a: ConflictsArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
     Err(CliError::Other("not yet implemented".into()))
 }
 
-pub fn merge_status_cmd(
-    _a: MergeStatusArgs,
-    _t: GroveTransport,
-    _m: OutputMode,
-) -> CliResult<()> {
+pub fn merge_status_cmd(_a: MergeStatusArgs, _t: GroveTransport, _m: OutputMode) -> CliResult<()> {
     Err(CliError::Other("not yet implemented".into()))
 }
 

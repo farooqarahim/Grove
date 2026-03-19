@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+const DEFAULT_REPORT_RUN_LIMIT: i64 = 50;
+
 use super::{RunResult, StartRunRequest, Transport};
 use crate::error::{CliError, CliResult};
 
@@ -94,36 +96,29 @@ impl Transport for DirectTransport {
 
         events
             .into_iter()
-            .map(|e| {
-                serde_json::to_value(&e).map_err(|err| CliError::Other(err.to_string()))
-            })
+            .map(|e| serde_json::to_value(&e).map_err(|err| CliError::Other(err.to_string())))
             .collect()
     }
 
-    fn get_report(&self, run_id: &str) -> CliResult<serde_json::Value> {
-        let report =
-            grove_core::orchestrator::cost_report(&self.project, 50).map_err(CliError::Core)?;
-        // Attach the specific run_id to contextualize the report.
-        let mut val =
-            serde_json::to_value(&report).map_err(|e| CliError::Other(e.to_string()))?;
-        if let Some(obj) = val.as_object_mut() {
-            obj.insert("run_id".to_string(), serde_json::Value::String(run_id.to_string()));
-        }
-        Ok(val)
+    fn get_report(&self, _run_id: &str) -> CliResult<serde_json::Value> {
+        // cost_report returns aggregate data across all completed runs, not per-run.
+        let report = grove_core::orchestrator::cost_report(&self.project, DEFAULT_REPORT_RUN_LIMIT)
+            .map_err(CliError::Core)?;
+        serde_json::to_value(&report).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn get_plan(&self, run_id: Option<&str>) -> CliResult<serde_json::Value> {
         let rid = run_id.ok_or_else(|| CliError::Other("run_id is required for plan".into()))?;
-        let steps =
-            grove_core::orchestrator::list_plan_steps(&self.project, rid).map_err(CliError::Core)?;
+        let steps = grove_core::orchestrator::list_plan_steps(&self.project, rid)
+            .map_err(CliError::Core)?;
         serde_json::to_value(&steps).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn get_subtasks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
         let rid =
             run_id.ok_or_else(|| CliError::Other("run_id is required for subtasks".into()))?;
-        let steps =
-            grove_core::orchestrator::list_plan_steps(&self.project, rid).map_err(CliError::Core)?;
+        let steps = grove_core::orchestrator::list_plan_steps(&self.project, rid)
+            .map_err(CliError::Core)?;
         steps
             .into_iter()
             .map(|s| serde_json::to_value(&s).map_err(|e| CliError::Other(e.to_string())))
@@ -131,8 +126,8 @@ impl Transport for DirectTransport {
     }
 
     fn get_sessions(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let sessions =
-            grove_core::orchestrator::list_sessions(&self.project, run_id).map_err(CliError::Core)?;
+        let sessions = grove_core::orchestrator::list_sessions(&self.project, run_id)
+            .map_err(CliError::Core)?;
         sessions
             .into_iter()
             .map(|s| serde_json::to_value(&s).map_err(|e| CliError::Other(e.to_string())))
