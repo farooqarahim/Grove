@@ -42,6 +42,7 @@ pub struct RunWatchState {
     pub scroll_offset: u16,
     pub done: bool,
     pub last_error: Option<String>,
+    pub cached_run: Option<grove_core::orchestrator::RunRecord>,
 }
 
 #[cfg(feature = "tui")]
@@ -57,6 +58,7 @@ impl RunWatchState {
             scroll_offset: 0,
             done: false,
             last_error: None,
+            cached_run: None,
         }
     }
 
@@ -76,12 +78,11 @@ impl RunWatchState {
 /// Run the live run-watch loop for `run_id`.
 #[cfg(feature = "tui")]
 pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult<()> {
-    // Fetch the objective from transport upfront.
-    let objective = transport
-        .get_run(&run_id)
-        .ok()
-        .flatten()
-        .map(|r| r.objective)
+    // Fetch the run record upfront to get the objective and seed cached_run.
+    let initial_run = transport.get_run(&run_id).ok().flatten();
+    let objective = initial_run
+        .as_ref()
+        .map(|r| r.objective.clone())
         .unwrap_or_default();
 
     enable_raw_mode().map_err(|e| crate::error::CliError::Other(e.to_string()))?;
@@ -93,19 +94,17 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
         Terminal::new(backend).map_err(|e| crate::error::CliError::Other(e.to_string()))?;
 
     let mut state = RunWatchState::new(run_id.clone(), objective);
+    state.cached_run = initial_run;
     let poll_interval = Duration::from_secs(3);
     let mut table_state = TableState::default();
 
     let result = (|| -> crate::error::CliResult<()> {
         loop {
-            // Single get_run call per iteration — used for both the agent-table
-            // refresh and the terminal-state check below.
-            let current_run = transport.get_run(&run_id).ok().flatten();
-
-            // Refresh data on interval
+            // Only fetch from transport when the refresh interval has elapsed.
             if state.last_refresh.elapsed() >= poll_interval {
-                // Update agent list from the already-fetched run record.
-                if let Some(ref run) = current_run {
+                state.last_refresh = Instant::now();
+                if let Ok(Some(run)) = transport.get_run(&run_id) {
+                    // Update agent list from the freshly-fetched run record.
                     state.agents.clear();
                     if let Some(agent) = &run.current_agent {
                         state.agents.push(AgentRow {
@@ -114,6 +113,7 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                             started: None,
                         });
                     }
+                    state.cached_run = Some(run);
                 }
 
                 // Refresh logs
@@ -123,8 +123,6 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
                         .filter_map(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
                         .collect();
                 }
-
-                state.last_refresh = Instant::now();
             }
 
             // Sync table selection
@@ -170,13 +168,16 @@ pub fn run(run_id: String, transport: GroveTransport) -> crate::error::CliResult
             }
 
             // Exit automatically when run reaches a terminal state.
-            // Re-uses the run record fetched at the top of this iteration.
-            if let Some(run) = current_run {
+            // Uses the last cached run record — no extra transport call.
+            if let Some(ref run) = state.cached_run {
                 let terminal_states = ["completed", "failed", "aborted"];
                 if terminal_states.contains(&run.state.as_str()) {
                     state.done = true;
+                    terminal
+                        .draw(|f| draw(f, &mut state, &mut table_state))
+                        .ok();
                     // Give user a chance to see the final state
-                    std::thread::sleep(Duration::from_secs(2));
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
                     break;
                 }
             }

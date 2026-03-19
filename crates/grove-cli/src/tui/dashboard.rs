@@ -181,7 +181,8 @@ pub fn draw(f: &mut Frame<'_>, state: &DashboardState) {
     let nav_area = layout[1];
 
     // Bottom navigation bar.
-    let nav_text = " [1] Dashboard  [2] Sessions  [3] Issues  [4] Settings    q: quit";
+    let nav_text =
+        " [1] Dashboard  [2] Sessions  [3] Issues  [4] Settings    Tab: next    q/Esc: quit";
     let nav = Paragraph::new(nav_text).style(Style::default().fg(super::widgets::ACCENT));
     f.render_widget(nav, nav_area);
 
@@ -241,9 +242,9 @@ fn draw_sessions(f: &mut Frame<'_>, state: &DashboardState, area: Rect) {
         .runs
         .iter()
         .map(|(id, objective, run_state)| {
-            let short_id = if id.len() >= 8 { &id[..8] } else { id.as_str() };
+            let short_id: String = id.chars().take(8).collect();
             let color = super::widgets::state_color(run_state);
-            let text = format!("{short_id}  {objective}  {run_state}");
+            let text = format!("{}  {objective}  {run_state}", short_id.as_str());
             ListItem::new(text).style(Style::default().fg(color))
         })
         .collect();
