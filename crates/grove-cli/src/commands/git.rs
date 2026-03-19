@@ -165,7 +165,14 @@ fn unstage_cmd(project: &Path, paths: &[String], mode: OutputMode) -> CliResult<
 fn revert_cmd(project: &Path, paths: &[String], all: bool, mode: OutputMode) -> CliResult<()> {
     if all || paths.is_empty() {
         // Discard all working-tree changes and remove untracked files.
-        run_git(project, vec!["checkout".to_string(), ".".to_string()])?;
+        run_git(
+            project,
+            vec![
+                "restore".to_string(),
+                "--worktree".to_string(),
+                ".".to_string(),
+            ],
+        )?;
         run_git(project, vec!["clean".to_string(), "-fd".to_string()])?;
         match mode {
             OutputMode::Json => println!(
@@ -176,7 +183,11 @@ fn revert_cmd(project: &Path, paths: &[String], all: bool, mode: OutputMode) -> 
         }
     } else {
         run_git(project, {
-            let mut args = vec!["checkout".to_string(), "--".to_string()];
+            let mut args = vec![
+                "restore".to_string(),
+                "--worktree".to_string(),
+                "--".to_string(),
+            ];
             args.extend_from_slice(paths);
             args
         })?;
@@ -270,11 +281,13 @@ fn push_smart(project: &Path) -> CliResult<()> {
         return Ok(());
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     if stderr.contains("no upstream branch")
         || stderr.contains("has no upstream")
         || stderr.contains("--set-upstream")
     {
+        // Fallback: try setting upstream explicitly on origin.
+        // Assumes remote is named 'origin' (standard convention).
         let retry = std::process::Command::new("git")
             .args(["push", "--set-upstream", "origin", "HEAD"])
             .current_dir(project)
@@ -284,7 +297,7 @@ fn push_smart(project: &Path) -> CliResult<()> {
         if retry.status.success() {
             return Ok(());
         }
-        let retry_err = String::from_utf8_lossy(&retry.stderr).to_string();
+        let retry_err = String::from_utf8_lossy(&retry.stderr).into_owned();
         return Err(CliError::Other(friendly_push_error(&retry_err)));
     }
 
@@ -307,14 +320,12 @@ fn friendly_push_error(stderr: &str) -> String {
 
 fn pull_cmd(project: &Path, mode: OutputMode) -> CliResult<()> {
     let output = run_git_output(project, vec!["pull".to_string()])?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
 
     match mode {
         OutputMode::Json => {
-            println!(
-                "{}",
-                json::emit_json(&serde_json::json!({ "pulled": true }))
-            );
+            let j = serde_json::json!({ "pulled": true, "output": stdout.trim() });
+            println!("{}", json::emit_json(&j));
         }
         OutputMode::Text { .. } => {
             if stdout.trim() == "Already up to date." {
@@ -673,7 +684,7 @@ mod tests {
 
         // Verify second.txt is now staged (index has it, but HEAD does not).
         let status = git(&["status", "--porcelain=v1"]);
-        let output = String::from_utf8_lossy(&status.stdout).to_string();
+        let output = String::from_utf8_lossy(&status.stdout).into_owned();
         assert!(
             output.contains("second.txt"),
             "second.txt should be staged after undo"
