@@ -4,6 +4,7 @@ const DEFAULT_REPORT_RUN_LIMIT: i64 = 50;
 
 use super::{RunResult, StartRunRequest, Transport};
 use crate::error::{CliError, CliResult};
+use grove_core::llm::{AuthInfo, AuthStore, LlmProviderKind, LlmRouter};
 
 pub struct DirectTransport {
     project: PathBuf,
@@ -142,6 +143,80 @@ impl Transport for DirectTransport {
         grove_core::orchestrator::resume_run(&self.project, run_id)
             .map(|_| ())
             .map_err(CliError::Core)
+    }
+
+    fn list_providers(&self) -> CliResult<Vec<serde_json::Value>> {
+        let statuses = LlmRouter::providers();
+        statuses
+            .into_iter()
+            .map(|s| {
+                let key_hint = if s.authenticated {
+                    AuthStore::get(s.kind.id())
+                        .map(|info| match info {
+                            AuthInfo::Api { key } => {
+                                let prefix: String = key.chars().take(8).collect();
+                                format!("{prefix}...")
+                            }
+                            AuthInfo::WorkspaceCredits => "workspace-credits".to_string(),
+                        })
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                let val = serde_json::json!({
+                    "provider": s.kind.id(),
+                    "name": s.name,
+                    "authenticated": s.authenticated,
+                    "key_hint": key_hint,
+                    "model_count": s.model_count,
+                    "default_model": s.default_model,
+                });
+                Ok(val)
+            })
+            .collect()
+    }
+
+    fn set_api_key(&self, provider: &str, key: &str) -> CliResult<()> {
+        let kind = LlmProviderKind::from_str(provider)
+            .ok_or_else(|| CliError::BadArg(format!("unknown provider: {provider}")))?;
+        LlmRouter::set_api_key(kind, key).map_err(|e| CliError::Other(e.to_string()))
+    }
+
+    fn remove_api_key(&self, provider: &str) -> CliResult<()> {
+        let kind = LlmProviderKind::from_str(provider)
+            .ok_or_else(|| CliError::BadArg(format!("unknown provider: {provider}")))?;
+        LlmRouter::remove_api_key(kind).map_err(|e| CliError::Other(e.to_string()))
+    }
+
+    fn list_models(&self, provider: &str) -> CliResult<Vec<serde_json::Value>> {
+        let kind = LlmProviderKind::from_str(provider)
+            .ok_or_else(|| CliError::BadArg(format!("unknown provider: {provider}")))?;
+        let models = LlmRouter::models(kind);
+        models
+            .iter()
+            .map(|m| {
+                let val = serde_json::json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "context_window": m.context_window,
+                    "max_output_tokens": m.max_output_tokens,
+                    "cost_input_per_m": m.cost_input_per_m,
+                    "cost_output_per_m": m.cost_output_per_m,
+                    "vision": m.capabilities.vision,
+                    "tools": m.capabilities.tools,
+                    "reasoning": m.capabilities.reasoning,
+                });
+                Ok(val)
+            })
+            .collect()
+    }
+
+    fn select_llm(&self, _provider: &str, _model: Option<&str>) -> CliResult<()> {
+        // Workspace-level LLM selection requires a DB connection with a workspace_id.
+        // That context is not available in direct mode without further scaffolding (Task 14).
+        Err(CliError::Other(
+            "llm select not yet available in direct mode".into(),
+        ))
     }
 
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {

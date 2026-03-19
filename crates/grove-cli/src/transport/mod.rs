@@ -84,7 +84,14 @@ pub trait Transport {
     fn get_sessions(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>>;
     fn abort_run(&self, run_id: &str) -> CliResult<()>;
     fn resume_run(&self, run_id: &str) -> CliResult<()>;
-    // Tasks 10–15 add more methods here. Update all 3 impls + TestTransport each time.
+
+    // ── Task 11 auth + llm methods ───────────────────────────────────────────
+    fn list_providers(&self) -> CliResult<Vec<serde_json::Value>>;
+    fn set_api_key(&self, provider: &str, key: &str) -> CliResult<()>;
+    fn remove_api_key(&self, provider: &str) -> CliResult<()>;
+    fn list_models(&self, provider: &str) -> CliResult<Vec<serde_json::Value>>;
+    fn select_llm(&self, provider: &str, model: Option<&str>) -> CliResult<()>;
+    // Tasks 12–15 add more methods here. Update all 3 impls + TestTransport each time.
 }
 
 /// Runtime transport — auto-detects socket vs direct at startup.
@@ -305,6 +312,51 @@ impl Transport for GroveTransport {
             GroveTransport::Test(t) => t.resume_run(run_id),
         }
     }
+
+    fn list_providers(&self) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.list_providers(),
+            GroveTransport::Socket(t) => t.list_providers(),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.list_providers(),
+        }
+    }
+
+    fn set_api_key(&self, provider: &str, key: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.set_api_key(provider, key),
+            GroveTransport::Socket(t) => t.set_api_key(provider, key),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.set_api_key(provider, key),
+        }
+    }
+
+    fn remove_api_key(&self, provider: &str) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.remove_api_key(provider),
+            GroveTransport::Socket(t) => t.remove_api_key(provider),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.remove_api_key(provider),
+        }
+    }
+
+    fn list_models(&self, provider: &str) -> CliResult<Vec<serde_json::Value>> {
+        match self {
+            GroveTransport::Direct(t) => t.list_models(provider),
+            GroveTransport::Socket(t) => t.list_models(provider),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.list_models(provider),
+        }
+    }
+
+    fn select_llm(&self, provider: &str, model: Option<&str>) -> CliResult<()> {
+        match self {
+            GroveTransport::Direct(t) => t.select_llm(provider, model),
+            GroveTransport::Socket(t) => t.select_llm(provider, model),
+            #[cfg(test)]
+            GroveTransport::Test(t) => t.select_llm(provider, model),
+        }
+    }
 }
 
 /// Test-only in-memory transport — all methods return empty/default.
@@ -394,6 +446,26 @@ impl Transport for TestTransport {
     }
 
     fn resume_run(&self, _run_id: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn list_providers(&self) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn set_api_key(&self, _provider: &str, _key: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn remove_api_key(&self, _provider: &str) -> CliResult<()> {
+        Err(CliError::Other("not implemented".into()))
+    }
+
+    fn list_models(&self, _provider: &str) -> CliResult<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+
+    fn select_llm(&self, _provider: &str, _model: Option<&str>) -> CliResult<()> {
         Err(CliError::Other("not implemented".into()))
     }
 }

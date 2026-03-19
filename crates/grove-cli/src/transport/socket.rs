@@ -106,4 +106,24 @@ impl Transport for SocketTransport {
     fn resume_run(&self, _run_id: &str) -> CliResult<()> {
         Err(CliError::Transport("socket not yet implemented".into()))
     }
+
+    fn list_providers(&self) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn set_api_key(&self, _provider: &str, _key: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn remove_api_key(&self, _provider: &str) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn list_models(&self, _provider: &str) -> CliResult<Vec<serde_json::Value>> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
+
+    fn select_llm(&self, _provider: &str, _model: Option<&str>) -> CliResult<()> {
+        Err(CliError::Transport("socket not yet implemented".into()))
+    }
 }
