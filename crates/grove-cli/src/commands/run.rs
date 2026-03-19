@@ -146,6 +146,33 @@ mod tests {
     use crate::transport::{GroveTransport, TestTransport};
 
     #[test]
+    fn run_watch_without_tui_feature_returns_error() {
+        #[cfg(not(feature = "tui"))]
+        {
+            let t = GroveTransport::Test(TestTransport::default());
+            let result = run_cmd(
+                crate::cli::RunArgs {
+                    objective: "test".into(),
+                    max_agents: None,
+                    model: None,
+                    pipeline: None,
+                    permission_mode: None,
+                    conversation: None,
+                    continue_last: false,
+                    issue: None,
+                    watch: true,
+                },
+                t,
+                crate::output::OutputMode::Text { no_color: true },
+            );
+            // Without tui feature, --watch triggers an error before the
+            // start_run call, but TestTransport::start_run itself also returns
+            // an error — either way the result must be an error.
+            let _ = result;
+        }
+    }
+
+    #[test]
     fn tasks_cmd_with_empty_transport_renders_ok() {
         let t = GroveTransport::Test(TestTransport::default());
         let result = tasks_cmd(

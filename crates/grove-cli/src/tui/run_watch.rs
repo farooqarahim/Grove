@@ -278,6 +278,106 @@ fn draw(f: &mut Frame<'_>, state: &mut RunWatchState, table_state: &mut TableSta
     f.render_widget(log_list, horiz[1]);
 }
 
+// ── Status-watch (multi-run live table) ───────────────────────────────────────
+
+/// View-model for the status-watch TUI (live table of recent runs).
+#[cfg(feature = "tui")]
+pub struct StatusWatchApp {
+    pub runs: Vec<grove_core::orchestrator::RunRecord>,
+    transport: GroveTransport,
+}
+
+#[cfg(feature = "tui")]
+impl StatusWatchApp {
+    pub fn new(transport: GroveTransport) -> Self {
+        Self {
+            runs: vec![],
+            transport,
+        }
+    }
+}
+
+/// Status watch — live table of recent runs, refreshed every 2 seconds.
+#[cfg(feature = "tui")]
+pub fn run_status_watch(transport: GroveTransport) -> crate::error::CliResult<()> {
+    use super::widgets::{ACCENT, state_color, titled_block};
+    use ratatui::{
+        Terminal,
+        backend::CrosstermBackend,
+        layout::Constraint,
+        prelude::*,
+        widgets::{Row, Table},
+    };
+
+    let mut app = StatusWatchApp::new(transport);
+
+    enable_raw_mode().map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen)
+        .map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal =
+        Terminal::new(backend).map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+
+    let poll_interval = Duration::from_secs(2);
+    let mut last_refresh = Instant::now() - poll_interval; // trigger immediate fetch
+
+    let result = (|| -> crate::error::CliResult<()> {
+        loop {
+            if last_refresh.elapsed() >= poll_interval {
+                app.runs = app.transport.list_runs(20).unwrap_or_default();
+                last_refresh = Instant::now();
+            }
+
+            terminal
+                .draw(|f| {
+                    let area = f.size();
+                    let rows: Vec<Row> = app
+                        .runs
+                        .iter()
+                        .map(|r| {
+                            let short_id: String = r.id.chars().take(8).collect();
+                            let obj: String = r.objective.chars().take(40).collect();
+                            let style = Style::default().fg(state_color(&r.state));
+                            Row::new(vec![short_id, obj, r.state.clone()]).style(style)
+                        })
+                        .collect();
+                    let table = Table::new(
+                        rows,
+                        [
+                            Constraint::Length(8),
+                            Constraint::Fill(1),
+                            Constraint::Length(10),
+                        ],
+                    )
+                    .header(
+                        Row::new(["ID", "OBJECTIVE", "STATE"])
+                            .style(Style::default().fg(ACCENT)),
+                    )
+                    .block(titled_block("Grove — Status Watch"));
+                    f.render_widget(table, area);
+                })
+                .map_err(|e| crate::error::CliError::Other(e.to_string()))?;
+
+            if event::poll(Duration::from_millis(250)).unwrap_or(false) {
+                if let Ok(Event::Key(key)) = event::read() {
+                    match (key.code, key.modifiers) {
+                        (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => break,
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        Ok(())
+    })();
+
+    disable_raw_mode().ok();
+    execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
+    terminal.show_cursor().ok();
+    result
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -330,5 +430,14 @@ mod tests {
         }];
         s.select_prev();
         assert_eq!(s.selected_agent, 0); // saturating_sub
+    }
+
+    #[test]
+    #[cfg(feature = "tui")]
+    fn run_status_watch_initialises_without_panic() {
+        use crate::transport::{GroveTransport, TestTransport};
+        let transport = GroveTransport::Test(TestTransport::default());
+        let app = super::StatusWatchApp::new(transport);
+        assert!(app.runs.is_empty());
     }
 }
