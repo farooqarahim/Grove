@@ -8,7 +8,7 @@ use crate::output::{OutputMode, text};
 
 pub fn run(args: DoctorArgs, _project: &Path, mode: OutputMode) -> CliResult<()> {
     let app = GroveApp::init()?;
-    let conn = app.db_handle().connect().map_err(CliError::Core)?;
+    let conn = app.pool().get().map_err(CliError::Core)?;
 
     let git_ok = which::which("git").is_ok();
     let db_ok = grove_core::db::integrity::check(&conn)

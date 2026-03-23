@@ -11,7 +11,20 @@ use cli::Cli;
 fn main() {
     let cli = Cli::parse();
     let mode_json = cli.json;
-    let transport = transport::GroveTransport::detect(&cli.project);
+
+    let workspace_root = match grove_core::app::GroveApp::init() {
+        Ok(app) => app.data_root.clone(),
+        Err(e) => {
+            if mode_json {
+                println!("{}", output::json::emit_error_json(&e.to_string(), 1));
+            } else {
+                eprintln!("error: {e}");
+            }
+            std::process::exit(1);
+        }
+    };
+
+    let transport = transport::GroveTransport::detect(&cli.project, &workspace_root);
 
     if let Err(e) = commands::dispatch(cli, transport) {
         if mode_json {

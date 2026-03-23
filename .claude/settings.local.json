@@ -147,7 +147,12 @@
       "Bash(./target/debug/grove auth:*)",
       "Bash(./target/debug/grove git:*)",
       "Bash(./target/debug/grove doctor:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "Bash(python3:*)",
+      "Bash(cargo metadata:*)",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(p[''''name''''], p[''''version'''']\\) for p in data[''''packages''''] if ''''sqlite'''' in p[''''name''''].lower\\(\\) or ''''rusqlite'''' in p[''''name''''].lower\\(\\)]\")",
+      "Bash(grove doctor:*)",
+      "Bash(cargo install:*)"
     ]
   }
 }
