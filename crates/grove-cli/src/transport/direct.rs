@@ -7,31 +7,35 @@ use crate::error::{CliError, CliResult};
 use grove_core::llm::{AuthInfo, AuthStore, LlmProviderKind, LlmRouter};
 
 pub struct DirectTransport {
+    /// The actual git project root — used for git, config, worktree, and CI operations.
     project: PathBuf,
+    /// The centralized Grove workspace root (~/.grove/workspaces/<id>/) — used for all DB operations.
+    workspace_root: PathBuf,
 }
 
 impl DirectTransport {
     #[allow(dead_code)] // called from GroveTransport::detect (Task 6)
-    pub fn new(project: &Path) -> Self {
+    pub fn new(project: &Path, workspace_root: &Path) -> Self {
         Self {
             project: project.to_owned(),
+            workspace_root: workspace_root.to_owned(),
         }
     }
 }
 
 impl Transport for DirectTransport {
     fn list_runs(&self, limit: i64) -> CliResult<Vec<grove_core::orchestrator::RunRecord>> {
-        grove_core::orchestrator::list_runs(&self.project, limit).map_err(CliError::Core)
+        grove_core::orchestrator::list_runs(&self.workspace_root, limit).map_err(CliError::Core)
     }
 
     fn list_tasks(&self) -> CliResult<Vec<grove_core::orchestrator::TaskRecord>> {
-        grove_core::orchestrator::list_tasks(&self.project).map_err(CliError::Core)
+        grove_core::orchestrator::list_tasks(&self.workspace_root).map_err(CliError::Core)
     }
 
     fn get_workspace(
         &self,
     ) -> CliResult<Option<grove_core::db::repositories::workspaces_repo::WorkspaceRow>> {
-        match grove_core::orchestrator::get_workspace(&self.project) {
+        match grove_core::orchestrator::get_workspace(&self.workspace_root) {
             Ok(row) => Ok(Some(row)),
             Err(grove_core::GroveError::NotFound(_)) => Ok(None),
             Err(e) => Err(CliError::Core(e)),
@@ -41,20 +45,20 @@ impl Transport for DirectTransport {
     fn list_projects(
         &self,
     ) -> CliResult<Vec<grove_core::db::repositories::projects_repo::ProjectRow>> {
-        grove_core::orchestrator::list_projects(&self.project).map_err(CliError::Core)
+        grove_core::orchestrator::list_projects(&self.workspace_root).map_err(CliError::Core)
     }
 
     fn list_conversations(
         &self,
         limit: i64,
     ) -> CliResult<Vec<grove_core::db::repositories::conversations_repo::ConversationRow>> {
-        grove_core::orchestrator::list_conversations(&self.project, limit).map_err(CliError::Core)
+        grove_core::orchestrator::list_conversations(&self.workspace_root, limit).map_err(CliError::Core)
     }
 
     fn list_issues(&self, _cached: bool) -> CliResult<Vec<serde_json::Value>> {
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
-        let db = grove_core::db::DbHandle::new(&self.project);
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let issues = grove_core::db::repositories::issues_repo::list(
             &conn,
@@ -69,7 +73,7 @@ impl Transport for DirectTransport {
     }
 
     fn get_issue(&self, id: &str) -> CliResult<serde_json::Value> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let issue = grove_core::db::repositories::issues_repo::get(&conn, id)
             .map_err(CliError::Core)?
@@ -85,8 +89,8 @@ impl Transport for DirectTransport {
         priority: Option<i64>,
     ) -> CliResult<serde_json::Value> {
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
-        let db = grove_core::db::DbHandle::new(&self.project);
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let priority_str = priority.map(|p| p.to_string());
         let issue = grove_core::db::repositories::issues_repo::create_native(
@@ -102,7 +106,7 @@ impl Transport for DirectTransport {
     }
 
     fn close_issue(&self, id: &str) -> CliResult<()> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         grove_core::db::repositories::issues_repo::update_status(
             &mut conn,
@@ -120,8 +124,8 @@ impl Transport for DirectTransport {
         provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>> {
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
-        let db = grove_core::db::DbHandle::new(&self.project);
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let mut filter = grove_core::db::repositories::issues_repo::IssueFilter::new();
         filter.limit = if limit > 0 { limit as usize } else { 100 };
@@ -154,9 +158,9 @@ impl Transport for DirectTransport {
 
     fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value> {
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
         let cfg = grove_core::config::loader::load_config(&self.project).map_err(CliError::Core)?;
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let incremental = !full;
         let result = if let Some(p) = provider {
@@ -215,7 +219,7 @@ impl Transport for DirectTransport {
         permission_mode: Option<&str>,
     ) -> CliResult<grove_core::orchestrator::TaskRecord> {
         grove_core::orchestrator::queue_task(
-            &self.project,
+            &self.workspace_root,
             objective,
             None, // budget_usd
             priority,
@@ -231,7 +235,7 @@ impl Transport for DirectTransport {
     }
 
     fn cancel_task(&self, task_id: &str) -> CliResult<()> {
-        grove_core::orchestrator::cancel_task(&self.project, task_id).map_err(CliError::Core)
+        grove_core::orchestrator::cancel_task(&self.workspace_root, task_id).map_err(CliError::Core)
     }
 
     fn drain_queue(&self, _project: &std::path::Path) -> CliResult<()> {
@@ -242,9 +246,9 @@ impl Transport for DirectTransport {
 
     fn get_logs(&self, run_id: &str, all: bool) -> CliResult<Vec<serde_json::Value>> {
         let events = if all {
-            grove_core::orchestrator::run_events_all(&self.project, run_id)
+            grove_core::orchestrator::run_events_all(&self.workspace_root, run_id)
         } else {
-            grove_core::orchestrator::run_events(&self.project, run_id)
+            grove_core::orchestrator::run_events(&self.workspace_root, run_id)
         }
         .map_err(CliError::Core)?;
 
@@ -256,14 +260,14 @@ impl Transport for DirectTransport {
 
     fn get_report(&self, _run_id: &str) -> CliResult<serde_json::Value> {
         // cost_report returns aggregate data across all completed runs, not per-run.
-        let report = grove_core::orchestrator::cost_report(&self.project, DEFAULT_REPORT_RUN_LIMIT)
+        let report = grove_core::orchestrator::cost_report(&self.workspace_root, DEFAULT_REPORT_RUN_LIMIT)
             .map_err(CliError::Core)?;
         serde_json::to_value(&report).map_err(|e| CliError::Other(e.to_string()))
     }
 
     fn get_plan(&self, run_id: Option<&str>) -> CliResult<serde_json::Value> {
         let rid = run_id.ok_or_else(|| CliError::Other("run_id is required for plan".into()))?;
-        let steps = grove_core::orchestrator::list_plan_steps(&self.project, rid)
+        let steps = grove_core::orchestrator::list_plan_steps(&self.workspace_root, rid)
             .map_err(CliError::Core)?;
         serde_json::to_value(&steps).map_err(|e| CliError::Other(e.to_string()))
     }
@@ -271,7 +275,7 @@ impl Transport for DirectTransport {
     fn get_subtasks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
         let rid =
             run_id.ok_or_else(|| CliError::Other("run_id is required for subtasks".into()))?;
-        let steps = grove_core::orchestrator::list_plan_steps(&self.project, rid)
+        let steps = grove_core::orchestrator::list_plan_steps(&self.workspace_root, rid)
             .map_err(CliError::Core)?;
         steps
             .into_iter()
@@ -280,7 +284,7 @@ impl Transport for DirectTransport {
     }
 
     fn get_sessions(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let sessions = grove_core::orchestrator::list_sessions(&self.project, run_id)
+        let sessions = grove_core::orchestrator::list_sessions(&self.workspace_root, run_id)
             .map_err(CliError::Core)?;
         sessions
             .into_iter()
@@ -289,11 +293,11 @@ impl Transport for DirectTransport {
     }
 
     fn abort_run(&self, run_id: &str) -> CliResult<()> {
-        grove_core::orchestrator::abort_run(&self.project, run_id).map_err(CliError::Core)
+        grove_core::orchestrator::abort_run(&self.workspace_root, run_id).map_err(CliError::Core)
     }
 
     fn resume_run(&self, run_id: &str) -> CliResult<()> {
-        grove_core::orchestrator::resume_run(&self.project, run_id)
+        grove_core::orchestrator::resume_run(&self.workspace_root, run_id)
             .map(|_| ())
             .map_err(CliError::Core)
     }
@@ -368,15 +372,15 @@ impl Transport for DirectTransport {
         LlmProviderKind::from_str(provider)
             .ok_or_else(|| CliError::BadArg(format!("unknown provider: {provider}")))?;
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
         let mut settings =
-            grove_core::orchestrator::get_project_settings(&self.project, &project.id)
+            grove_core::orchestrator::get_project_settings(&self.workspace_root, &project.id)
                 .map_err(CliError::Core)?;
         settings.default_llm_provider = Some(provider.to_string());
         if let Some(m) = model {
             settings.default_llm_model = Some(m.to_string());
         }
-        grove_core::orchestrator::update_project_settings(&self.project, &project.id, &settings)
+        grove_core::orchestrator::update_project_settings(&self.workspace_root, &project.id, &settings)
             .map_err(CliError::Core)
     }
 
@@ -389,7 +393,7 @@ impl Transport for DirectTransport {
         assignee: Option<&str>,
         priority: Option<&str>,
     ) -> CliResult<serde_json::Value> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let update = grove_core::tracker::IssueUpdate {
             title: title.map(|s| s.to_string()),
@@ -408,7 +412,7 @@ impl Transport for DirectTransport {
     }
 
     fn comment_issue(&self, id: &str, body: &str) -> CliResult<serde_json::Value> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let comment_id = grove_core::db::repositories::issues_repo::add_comment(
             &mut conn, id, body, "user", false,
@@ -418,7 +422,7 @@ impl Transport for DirectTransport {
     }
 
     fn assign_issue(&self, id: &str, assignee: &str) -> CliResult<()> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let update = grove_core::tracker::IssueUpdate {
             assignee: Some(assignee.to_string()),
@@ -430,14 +434,14 @@ impl Transport for DirectTransport {
 
     fn move_issue(&self, id: &str, status: &str) -> CliResult<()> {
         let canonical = grove_core::tracker::status::normalize("grove", status);
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         grove_core::db::repositories::issues_repo::update_status(&mut conn, id, status, canonical)
             .map_err(CliError::Core)
     }
 
     fn reopen_issue(&self, id: &str) -> CliResult<()> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         grove_core::db::repositories::issues_repo::update_status(
             &mut conn,
@@ -449,7 +453,7 @@ impl Transport for DirectTransport {
     }
 
     fn activity_issue(&self, id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let events = grove_core::db::repositories::issues_repo::list_events(&conn, id)
             .map_err(CliError::Core)?;
@@ -486,7 +490,7 @@ impl Transport for DirectTransport {
 
     fn push_issue(&self, id: &str, _provider: &str) -> CliResult<serde_json::Value> {
         // Return the current issue state; actual provider push requires an active backend.
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let issue = grove_core::db::repositories::issues_repo::get(&conn, id)
             .map_err(CliError::Core)?
@@ -495,7 +499,7 @@ impl Transport for DirectTransport {
     }
 
     fn issue_ready(&self, id: &str) -> CliResult<serde_json::Value> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let update = grove_core::tracker::IssueUpdate {
             status: Some("ready".to_string()),
@@ -604,21 +608,21 @@ impl Transport for DirectTransport {
     }
 
     fn set_workspace_name(&self, name: &str) -> CliResult<()> {
-        grove_core::orchestrator::update_workspace_name(&self.project, name).map_err(CliError::Core)
+        grove_core::orchestrator::update_workspace_name(&self.workspace_root, name).map_err(CliError::Core)
     }
 
     fn archive_workspace(&self, id: &str) -> CliResult<()> {
-        grove_core::orchestrator::archive_workspace(&self.project, id).map_err(CliError::Core)
+        grove_core::orchestrator::archive_workspace(&self.workspace_root, id).map_err(CliError::Core)
     }
 
     fn delete_workspace(&self, id: &str) -> CliResult<()> {
-        grove_core::orchestrator::delete_workspace(&self.project, id).map_err(CliError::Core)
+        grove_core::orchestrator::delete_workspace(&self.workspace_root, id).map_err(CliError::Core)
     }
 
     fn get_project(
         &self,
     ) -> CliResult<Option<grove_core::db::repositories::projects_repo::ProjectRow>> {
-        match grove_core::orchestrator::get_project(&self.project) {
+        match grove_core::orchestrator::get_project(&self.workspace_root) {
             Ok(row) => Ok(Some(row)),
             Err(grove_core::GroveError::NotFound(_)) => Ok(None),
             Err(e) => Err(CliError::Core(e)),
@@ -626,10 +630,9 @@ impl Transport for DirectTransport {
     }
 
     fn set_project_name(&self, name: &str) -> CliResult<()> {
-        // Resolve the current project id then rename it.
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
-        grove_core::orchestrator::update_project_name(&self.project, &project.id, name)
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
+        grove_core::orchestrator::update_project_name(&self.workspace_root, &project.id, name)
             .map_err(CliError::Core)
     }
 
@@ -641,9 +644,9 @@ impl Transport for DirectTransport {
         permission_mode: Option<&str>,
     ) -> CliResult<()> {
         let project =
-            grove_core::orchestrator::get_project(&self.project).map_err(CliError::Core)?;
+            grove_core::orchestrator::get_project(&self.workspace_root).map_err(CliError::Core)?;
         let mut settings =
-            grove_core::orchestrator::get_project_settings(&self.project, &project.id)
+            grove_core::orchestrator::get_project_settings(&self.workspace_root, &project.id)
                 .map_err(CliError::Core)?;
         if let Some(p) = provider {
             settings.default_provider = Some(p.to_string());
@@ -657,7 +660,7 @@ impl Transport for DirectTransport {
         if let Some(pm) = permission_mode {
             settings.default_permission_mode = Some(pm.to_string());
         }
-        grove_core::orchestrator::update_project_settings(&self.project, &project.id, &settings)
+        grove_core::orchestrator::update_project_settings(&self.workspace_root, &project.id, &settings)
             .map_err(CliError::Core)
     }
 
@@ -665,12 +668,12 @@ impl Transport for DirectTransport {
         let project_id = match id {
             Some(i) => i.to_string(),
             None => {
-                grove_core::orchestrator::get_project(&self.project)
+                grove_core::orchestrator::get_project(&self.workspace_root)
                     .map_err(CliError::Core)?
                     .id
             }
         };
-        grove_core::orchestrator::archive_project(&self.project, &project_id)
+        grove_core::orchestrator::archive_project(&self.workspace_root, &project_id)
             .map_err(CliError::Core)
     }
 
@@ -678,19 +681,19 @@ impl Transport for DirectTransport {
         let project_id = match id {
             Some(i) => i.to_string(),
             None => {
-                grove_core::orchestrator::get_project(&self.project)
+                grove_core::orchestrator::get_project(&self.workspace_root)
                     .map_err(CliError::Core)?
                     .id
             }
         };
-        grove_core::orchestrator::delete_project(&self.project, &project_id).map_err(CliError::Core)
+        grove_core::orchestrator::delete_project(&self.workspace_root, &project_id).map_err(CliError::Core)
     }
 
     fn get_conversation(
         &self,
         id: &str,
     ) -> CliResult<Option<grove_core::db::repositories::conversations_repo::ConversationRow>> {
-        match grove_core::orchestrator::get_conversation(&self.project, id) {
+        match grove_core::orchestrator::get_conversation(&self.workspace_root, id) {
             Ok(row) => Ok(Some(row)),
             Err(grove_core::GroveError::NotFound(_)) => Ok(None),
             Err(e) => Err(CliError::Core(e)),
@@ -698,21 +701,21 @@ impl Transport for DirectTransport {
     }
 
     fn archive_conversation(&self, id: &str) -> CliResult<()> {
-        grove_core::orchestrator::archive_conversation(&self.project, id).map_err(CliError::Core)
+        grove_core::orchestrator::archive_conversation(&self.workspace_root, id).map_err(CliError::Core)
     }
 
     fn delete_conversation(&self, id: &str) -> CliResult<()> {
-        grove_core::orchestrator::delete_conversation(&self.project, id).map_err(CliError::Core)
+        grove_core::orchestrator::delete_conversation(&self.workspace_root, id).map_err(CliError::Core)
     }
 
     fn rebase_conversation(&self, id: &str) -> CliResult<()> {
-        grove_core::orchestrator::rebase_conversation(&self.project, id)
+        grove_core::orchestrator::rebase_conversation(&self.workspace_root, id)
             .map(|_| ())
             .map_err(CliError::Core)
     }
 
     fn merge_conversation(&self, id: &str) -> CliResult<()> {
-        grove_core::orchestrator::merge_conversation(&self.project, id)
+        grove_core::orchestrator::merge_conversation(&self.workspace_root, id)
             .map(|_| ())
             .map_err(CliError::Core)
     }
@@ -728,7 +731,7 @@ impl Transport for DirectTransport {
         payload: Option<&str>,
         priority: Option<i64>,
     ) -> CliResult<()> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let sig_type = grove_core::signals::SignalType::parse(signal_type)
             .ok_or_else(|| CliError::BadArg(format!("unknown signal type: {signal_type}")))?;
@@ -757,7 +760,7 @@ impl Transport for DirectTransport {
     }
 
     fn check_signals(&self, run_id: &str, agent: &str) -> CliResult<Vec<serde_json::Value>> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let signals =
             grove_core::signals::check_signals(&conn, run_id, agent).map_err(CliError::Core)?;
@@ -768,7 +771,7 @@ impl Transport for DirectTransport {
     }
 
     fn list_signals(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let conn = db.connect().map_err(CliError::Core)?;
         let signals = grove_core::signals::list_for_run(&conn, run_id).map_err(CliError::Core)?;
         signals
@@ -876,7 +879,7 @@ impl Transport for DirectTransport {
     }
 
     fn run_gc(&self, _dry_run: bool) -> CliResult<serde_json::Value> {
-        let db = grove_core::db::DbHandle::new(&self.project);
+        let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
         let report = grove_core::worktree::sweep_orphaned_resources(&self.project, &mut conn)
             .map_err(CliError::Core)?;
@@ -896,7 +899,7 @@ impl Transport for DirectTransport {
 
     fn start_run(&self, req: StartRunRequest) -> CliResult<RunResult> {
         let task = grove_core::orchestrator::queue_task(
-            &self.project,
+            &self.workspace_root,
             &req.objective,
             None, // budget_usd
             0,    // priority (default)
@@ -922,7 +925,7 @@ impl Transport for DirectTransport {
     // ── New methods: ownership locks, merge queue, retry publish ─────────────
 
     fn list_ownership_locks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
-        let locks = grove_core::orchestrator::list_ownership_locks(&self.project, run_id)
+        let locks = grove_core::orchestrator::list_ownership_locks(&self.workspace_root, run_id)
             .map_err(CliError::Core)?;
         locks
             .into_iter()
@@ -931,8 +934,9 @@ impl Transport for DirectTransport {
     }
 
     fn list_merge_queue(&self, conversation_id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let entries = grove_core::orchestrator::list_merge_queue(&self.project, conversation_id)
-            .map_err(CliError::Core)?;
+        let entries =
+            grove_core::orchestrator::list_merge_queue(&self.workspace_root, conversation_id)
+                .map_err(CliError::Core)?;
         entries
             .into_iter()
             .map(|e| serde_json::to_value(&e).map_err(|e2| CliError::Other(e2.to_string())))
@@ -940,7 +944,7 @@ impl Transport for DirectTransport {
     }
 
     fn retry_publish_run(&self, run_id: &str) -> CliResult<()> {
-        grove_core::orchestrator::retry_publish_run(&self.project, run_id)
+        grove_core::orchestrator::retry_publish_run(&self.workspace_root, run_id)
             .map(|_| ())
             .map_err(CliError::Core)
     }

@@ -238,7 +238,7 @@ pub enum GroveTransport {
 
 impl GroveTransport {
     #[allow(dead_code)] // called from Task 6 dispatch
-    pub fn detect(project: &std::path::Path) -> Self {
+    pub fn detect(project: &std::path::Path, workspace_root: &std::path::Path) -> Self {
         let local_sock = project.join(".grove/grove.sock");
         let global_sock = dirs::home_dir()
             .map(|h| h.join(".grove/grove.sock"))
@@ -251,7 +251,7 @@ impl GroveTransport {
             };
             GroveTransport::Socket(socket::SocketTransport::new(sock))
         } else {
-            GroveTransport::Direct(direct::DirectTransport::new(project))
+            GroveTransport::Direct(direct::DirectTransport::new(project, workspace_root))
         }
     }
 }

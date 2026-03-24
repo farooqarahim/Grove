@@ -874,46 +874,53 @@ fn fix_runs_waiting_for_gate_constraint(conn: &mut Connection) -> GroveResult<()
         return Ok(());
     }
 
-    let new_sql = current_sql.replace(
-        "'created','planning','executing','verifying','publishing','merging','completed','failed','paused'",
-        "'created','planning','executing','waiting_for_gate','verifying','publishing','merging','completed','failed','paused'",
-    );
+    // Rebuild the runs table with the correct CHECK constraint instead of using
+    // PRAGMA writable_schema, which can corrupt sqlite_master.
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
-    if new_sql == current_sql {
-        tracing::warn!("migration 0046: runs CHECK constraint not in expected format, skipping");
-        conn.execute(
-            "UPDATE meta SET value = '46' WHERE key = 'schema_version'",
-            [],
-        )?;
-        return Ok(());
-    }
+    tx.execute_batch("
+        CREATE TABLE runs_new (
+            id              TEXT PRIMARY KEY,
+            objective        TEXT NOT NULL,
+            state            TEXT NOT NULL CHECK(state IN ('created','planning','executing','waiting_for_gate','verifying','publishing','merging','completed','failed','paused')),
+            budget_usd       REAL NOT NULL DEFAULT 0,
+            cost_used_usd    REAL NOT NULL DEFAULT 0,
+            publish_status   TEXT NOT NULL DEFAULT 'pending_retry' CHECK(publish_status IN ('pending_retry','published','failed','skipped_no_changes')),
+            publish_error    TEXT,
+            final_commit_sha TEXT,
+            pr_url           TEXT,
+            published_at     TEXT,
+            conversation_id  TEXT REFERENCES conversations(id),
+            provider         TEXT,
+            model            TEXT,
+            provider_thread_id TEXT,
+            pipeline         TEXT,
+            current_agent    TEXT,
+            disable_phase_gates INTEGER NOT NULL DEFAULT 0,
+            created_at       TEXT NOT NULL,
+            updated_at       TEXT NOT NULL
+        );
+        INSERT INTO runs_new
+            SELECT id, objective, state, budget_usd, cost_used_usd,
+                   COALESCE(publish_status, 'pending_retry'), publish_error,
+                   final_commit_sha, pr_url, published_at, conversation_id,
+                   provider, model, provider_thread_id, pipeline, current_agent,
+                   COALESCE(disable_phase_gates, 0),
+                   created_at, updated_at
+            FROM runs;
+        DROP TABLE runs;
+        ALTER TABLE runs_new RENAME TO runs;
+        DROP INDEX IF EXISTS idx_active_run_per_conv;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_active_run_per_conv
+            ON runs(conversation_id)
+            WHERE state IN ('executing','waiting_for_gate','planning','verifying','publishing','merging');
+        UPDATE meta SET value = '46' WHERE key = 'schema_version';
+    ")?;
 
-    conn.execute_batch("PRAGMA writable_schema = ON;")?;
-    conn.execute(
-        "UPDATE sqlite_master SET sql = ?1 WHERE type = 'table' AND name = 'runs'",
-        [&new_sql],
-    )?;
-    conn.execute_batch("PRAGMA writable_schema = OFF;")?;
-
-    conn.execute("DROP INDEX IF EXISTS idx_active_run_per_conv", [])?;
-    conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_active_run_per_conv ON runs(conversation_id) WHERE state IN ('executing','waiting_for_gate','planning','verifying','publishing','merging')",
-        [],
-    )?;
-
-    let integrity: String = conn
-        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
-        .unwrap_or_else(|_| "error".to_string());
-    if integrity != "ok" {
-        tracing::error!(result = %integrity, "integrity check failed after migration 0046");
-    }
-    conn.execute(
-        "UPDATE meta SET value = '46' WHERE key = 'schema_version'",
-        [],
-    )?;
+    tx.commit()?;
 
     tracing::info!(
-        "migration 0046: fixed runs.state CHECK constraint to include 'waiting_for_gate'"
+        "migration 0046: rebuilt runs table with 'waiting_for_gate' in state CHECK constraint"
     );
     Ok(())
 }
