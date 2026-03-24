@@ -141,19 +141,19 @@ mod tests {
 
     #[test]
     fn workspace_show_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(show_cmd(t, crate::output::OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn workspace_show_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(show_cmd(t, crate::output::OutputMode::Json).is_ok());
     }
 
     #[test]
     fn workspace_set_name_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = set_name_cmd(
             WorkspaceSetNameArgs {
                 name: "my-ws".into(),
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn workspace_archive_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = archive_cmd(
             WorkspaceArchiveArgs { id: "ws_1".into() },
             t,
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn workspace_delete_returns_err_on_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = delete_cmd(
             WorkspaceDeleteArgs { id: "ws_1".into() },
             t,

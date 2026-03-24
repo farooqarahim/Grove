@@ -712,7 +712,7 @@ pub async fn git_project_revert_all(project_root: String) -> Result<(), String> 
         // Unstage any staged changes first so checkout . can revert them
         let reset_output = std::process::Command::new("git")
             .args(["reset", "HEAD"])
-            .current_dir(&cwd)
+            .current_dir(cwd)
             .output()
             .map_err(|e| format!("git reset HEAD failed: {e}"))?;
         if !reset_output.status.success() {
@@ -1230,6 +1230,7 @@ pub struct PublishChangesResult {
     pub pr: Option<PrResult>,
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn publish_changes(
     state: State<'_, AppState>,

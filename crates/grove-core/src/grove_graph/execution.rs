@@ -1049,7 +1049,7 @@ mod tests {
         };
         let r2 = r.clone();
         assert_eq!(r2.run_id, "run_001");
-        assert_eq!(format!("{:?}", r2).is_empty(), false);
+        assert!(!format!("{:?}", r2).is_empty());
     }
 
     #[test]
@@ -1066,7 +1066,7 @@ mod tests {
         let r2 = r.clone();
         assert_eq!(r2.grade, 8);
         assert!(r2.passed);
-        assert_eq!(format!("{:?}", r2).is_empty(), false);
+        assert!(!format!("{:?}", r2).is_empty());
     }
 
     #[test]

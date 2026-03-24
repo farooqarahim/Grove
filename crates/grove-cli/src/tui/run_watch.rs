@@ -469,7 +469,7 @@ mod tests {
     #[cfg(feature = "tui")]
     fn run_status_watch_initialises_without_panic() {
         use crate::transport::{GroveTransport, TestTransport};
-        let transport = GroveTransport::Test(TestTransport::default());
+        let transport = GroveTransport::Test(TestTransport);
         let app = super::StatusWatchApp::new(transport);
         assert!(app.runs.is_empty());
     }

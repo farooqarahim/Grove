@@ -541,12 +541,8 @@ fn pr_status_cmd(project: &Path, mode: OutputMode) -> CliResult<()> {
             );
             println!(
                 "branch: {} \u{2192} {}",
-                pr.get("headRefName")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(""),
-                pr.get("baseRefName")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
+                pr.get("headRefName").and_then(|v| v.as_str()).unwrap_or(""),
+                pr.get("baseRefName").and_then(|v| v.as_str()).unwrap_or("")
             );
         }
     }
@@ -585,10 +581,7 @@ fn merge_cmd(
 
     match mode {
         OutputMode::Json => {
-            println!(
-                "{}",
-                json::emit_json(&serde_json::json!({"merged": true}))
-            );
+            println!("{}", json::emit_json(&serde_json::json!({"merged": true})));
         }
         OutputMode::Text { .. } => {
             println!("Pull request merged.");

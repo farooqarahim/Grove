@@ -1348,7 +1348,7 @@ mod tests {
 
     #[test]
     fn test_transport_list_runs_returns_empty() {
-        let t = TestTransport::default();
+        let t = TestTransport;
         assert!(t.list_runs(10).unwrap().is_empty());
     }
 }

@@ -414,9 +414,10 @@ impl Transport for DirectTransport {
     fn comment_issue(&self, id: &str, body: &str) -> CliResult<serde_json::Value> {
         let db = grove_core::db::DbHandle::new(&self.workspace_root);
         let mut conn = db.connect().map_err(CliError::Core)?;
-        let comment_id =
-            grove_core::db::repositories::issues_repo::add_comment(&mut conn, id, body, "user", false)
-                .map_err(CliError::Core)?;
+        let comment_id = grove_core::db::repositories::issues_repo::add_comment(
+            &mut conn, id, body, "user", false,
+        )
+        .map_err(CliError::Core)?;
         Ok(serde_json::json!({ "id": comment_id, "issue_id": id, "body": body, "author": "user" }))
     }
 
@@ -461,8 +462,7 @@ impl Transport for DirectTransport {
         let mut activity: Vec<serde_json::Value> = events
             .into_iter()
             .map(|e| {
-                let mut v =
-                    serde_json::to_value(&e).unwrap_or(serde_json::Value::Null);
+                let mut v = serde_json::to_value(&e).unwrap_or(serde_json::Value::Null);
                 if let serde_json::Value::Object(ref mut m) = v {
                     m.insert("kind".to_string(), serde_json::json!("event"));
                 }
@@ -472,8 +472,7 @@ impl Transport for DirectTransport {
         let mut comment_values: Vec<serde_json::Value> = comments
             .into_iter()
             .map(|c| {
-                let mut v =
-                    serde_json::to_value(&c).unwrap_or(serde_json::Value::Null);
+                let mut v = serde_json::to_value(&c).unwrap_or(serde_json::Value::Null);
                 if let serde_json::Value::Object(ref mut m) = v {
                     m.insert("kind".to_string(), serde_json::json!("comment"));
                 }
@@ -482,14 +481,8 @@ impl Transport for DirectTransport {
             .collect();
         activity.append(&mut comment_values);
         activity.sort_by(|a, b| {
-            let ta = a
-                .get("created_at")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let tb = b
-                .get("created_at")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let ta = a.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+            let tb = b.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
             ta.cmp(tb)
         });
         Ok(activity)
@@ -826,8 +819,8 @@ impl Transport for DirectTransport {
     // ── Task 15 worktree methods ──────────────────────────────────────────────
 
     fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
-        let entries = grove_core::worktree::list_worktrees(&self.project, true)
-            .map_err(CliError::Core)?;
+        let entries =
+            grove_core::worktree::list_worktrees(&self.project, true).map_err(CliError::Core)?;
         entries
             .into_iter()
             .map(|e| {
@@ -862,8 +855,8 @@ impl Transport for DirectTransport {
     }
 
     fn delete_all_worktrees(&self) -> CliResult<serde_json::Value> {
-        let (count, bytes) = grove_core::worktree::delete_all_worktrees(&self.project)
-            .map_err(CliError::Core)?;
+        let (count, bytes) =
+            grove_core::worktree::delete_all_worktrees(&self.project).map_err(CliError::Core)?;
         Ok(serde_json::json!({"deleted": count, "bytes_freed": bytes}))
     }
 
@@ -877,9 +870,8 @@ impl Transport for DirectTransport {
         _yes: bool,
         _force: bool,
     ) -> CliResult<serde_json::Value> {
-        let (deleted, bytes_freed) =
-            grove_core::worktree::delete_finished_worktrees(&self.project)
-                .map_err(CliError::Core)?;
+        let (deleted, bytes_freed) = grove_core::worktree::delete_finished_worktrees(&self.project)
+            .map_err(CliError::Core)?;
         Ok(serde_json::json!({
             "deleted_worktrees": deleted,
             "bytes_freed": bytes_freed,

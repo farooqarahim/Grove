@@ -3942,7 +3942,7 @@ mod tests {
         let mut conn = crate::db::DbHandle::new(repo.path()).connect().unwrap();
         let workspace_id = workspace::ensure_workspace(&conn).unwrap();
         crate::db::repositories::projects_repo::insert(
-            &mut conn,
+            &conn,
             &ProjectRow {
                 id: "proj_publish".to_string(),
                 workspace_id,

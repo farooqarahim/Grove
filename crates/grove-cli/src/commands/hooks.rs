@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn hook_run_cmd_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             run_cmd(
                 "PostToolUse",
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn hook_run_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(
             run_cmd(
                 "PostToolUse",

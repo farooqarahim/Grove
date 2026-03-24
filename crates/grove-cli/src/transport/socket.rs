@@ -72,14 +72,12 @@ impl SocketTransport {
 impl Transport for SocketTransport {
     fn list_runs(&self, limit: i64) -> CliResult<Vec<grove_core::orchestrator::RunRecord>> {
         let val = self.call("grove.list_runs", serde_json::json!({"limit": limit}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn list_tasks(&self) -> CliResult<Vec<grove_core::orchestrator::TaskRecord>> {
         let val = self.call("grove.list_tasks", serde_json::json!({}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn get_workspace(
@@ -98,23 +96,23 @@ impl Transport for SocketTransport {
         &self,
     ) -> CliResult<Vec<grove_core::db::repositories::projects_repo::ProjectRow>> {
         let val = self.call("grove.list_projects", serde_json::json!({}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn list_conversations(
         &self,
         limit: i64,
     ) -> CliResult<Vec<grove_core::db::repositories::conversations_repo::ConversationRow>> {
-        let val = self.call("grove.list_conversations", serde_json::json!({"limit": limit}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        let val = self.call(
+            "grove.list_conversations",
+            serde_json::json!({"limit": limit}),
+        )?;
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn list_issues(&self, cached: bool) -> CliResult<Vec<serde_json::Value>> {
         let val = self.call("grove.list_issues", serde_json::json!({"cached": cached}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn get_issue(&self, id: &str) -> CliResult<serde_json::Value> {
@@ -158,8 +156,7 @@ impl Transport for SocketTransport {
                 "provider": provider,
             }),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value> {
@@ -189,8 +186,7 @@ impl Transport for SocketTransport {
                 "permission_mode": permission_mode,
             }),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn cancel_task(&self, task_id: &str) -> CliResult<()> {
@@ -247,8 +243,7 @@ impl Transport for SocketTransport {
             "grove.get_logs",
             serde_json::json!({"run_id": run_id, "all": all}),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn get_report(&self, run_id: &str) -> CliResult<serde_json::Value> {
@@ -260,21 +255,13 @@ impl Transport for SocketTransport {
     }
 
     fn get_subtasks(&self, run_id: Option<&str>) -> CliResult<Vec<serde_json::Value>> {
-        let val = self.call(
-            "grove.get_subtasks",
-            serde_json::json!({"run_id": run_id}),
-        )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        let val = self.call("grove.get_subtasks", serde_json::json!({"run_id": run_id}))?;
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn get_sessions(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let val = self.call(
-            "grove.get_sessions",
-            serde_json::json!({"run_id": run_id}),
-        )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        let val = self.call("grove.get_sessions", serde_json::json!({"run_id": run_id}))?;
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn abort_run(&self, run_id: &str) -> CliResult<()> {
@@ -289,8 +276,7 @@ impl Transport for SocketTransport {
 
     fn list_providers(&self) -> CliResult<Vec<serde_json::Value>> {
         let val = self.call("grove.list_providers", serde_json::json!({}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn set_api_key(&self, provider: &str, key: &str) -> CliResult<()> {
@@ -314,8 +300,7 @@ impl Transport for SocketTransport {
             "grove.list_models",
             serde_json::json!({"provider": provider}),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn select_llm(&self, provider: &str, model: Option<&str>) -> CliResult<()> {
@@ -378,8 +363,7 @@ impl Transport for SocketTransport {
 
     fn activity_issue(&self, id: &str) -> CliResult<Vec<serde_json::Value>> {
         let val = self.call("grove.activity_issue", serde_json::json!({"id": id}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn push_issue(&self, id: &str, provider: &str) -> CliResult<serde_json::Value> {
@@ -395,8 +379,7 @@ impl Transport for SocketTransport {
 
     fn connect_status(&self) -> CliResult<Vec<serde_json::Value>> {
         let val = self.call("grove.connect_status", serde_json::json!({}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn connect_provider(
@@ -484,11 +467,8 @@ impl Transport for SocketTransport {
     }
 
     fn set_project_name(&self, name: &str) -> CliResult<()> {
-        self.call(
-            "grove.set_project_name",
-            serde_json::json!({"name": name}),
-        )
-        .map(|_| ())
+        self.call("grove.set_project_name", serde_json::json!({"name": name}))
+            .map(|_| ())
     }
 
     fn set_project_settings(
@@ -534,35 +514,23 @@ impl Transport for SocketTransport {
     }
 
     fn archive_conversation(&self, id: &str) -> CliResult<()> {
-        self.call(
-            "grove.archive_conversation",
-            serde_json::json!({"id": id}),
-        )
-        .map(|_| ())
+        self.call("grove.archive_conversation", serde_json::json!({"id": id}))
+            .map(|_| ())
     }
 
     fn delete_conversation(&self, id: &str) -> CliResult<()> {
-        self.call(
-            "grove.delete_conversation",
-            serde_json::json!({"id": id}),
-        )
-        .map(|_| ())
+        self.call("grove.delete_conversation", serde_json::json!({"id": id}))
+            .map(|_| ())
     }
 
     fn rebase_conversation(&self, id: &str) -> CliResult<()> {
-        self.call(
-            "grove.rebase_conversation",
-            serde_json::json!({"id": id}),
-        )
-        .map(|_| ())
+        self.call("grove.rebase_conversation", serde_json::json!({"id": id}))
+            .map(|_| ())
     }
 
     fn merge_conversation(&self, id: &str) -> CliResult<()> {
-        self.call(
-            "grove.merge_conversation",
-            serde_json::json!({"id": id}),
-        )
-        .map(|_| ())
+        self.call("grove.merge_conversation", serde_json::json!({"id": id}))
+            .map(|_| ())
     }
 
     fn send_signal(
@@ -593,17 +561,12 @@ impl Transport for SocketTransport {
             "grove.check_signals",
             serde_json::json!({"run_id": run_id, "agent": agent}),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn list_signals(&self, run_id: &str) -> CliResult<Vec<serde_json::Value>> {
-        let val = self.call(
-            "grove.list_signals",
-            serde_json::json!({"run_id": run_id}),
-        )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        let val = self.call("grove.list_signals", serde_json::json!({"run_id": run_id}))?;
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn run_hook(
@@ -631,8 +594,7 @@ impl Transport for SocketTransport {
 
     fn list_worktrees(&self) -> CliResult<Vec<serde_json::Value>> {
         let val = self.call("grove.list_worktrees", serde_json::json!({}))?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn clean_worktrees(&self) -> CliResult<serde_json::Value> {
@@ -687,8 +649,7 @@ impl Transport for SocketTransport {
             "grove.list_ownership_locks",
             serde_json::json!({"run_id": run_id}),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn list_merge_queue(&self, conversation_id: &str) -> CliResult<Vec<serde_json::Value>> {
@@ -696,8 +657,7 @@ impl Transport for SocketTransport {
             "grove.list_merge_queue",
             serde_json::json!({"conversation_id": conversation_id}),
         )?;
-        serde_json::from_value(val)
-            .map_err(|e| CliError::Transport(format!("deserialize: {e}")))
+        serde_json::from_value(val).map_err(|e| CliError::Transport(format!("deserialize: {e}")))
     }
 
     fn retry_publish_run(&self, run_id: &str) -> CliResult<()> {

@@ -164,13 +164,13 @@ mod tests {
 
     #[test]
     fn worktrees_list_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(t, crate::output::OutputMode::Text { no_color: true }).is_ok());
     }
 
     #[test]
     fn worktrees_list_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(list_cmd(t, crate::output::OutputMode::Json).is_ok());
     }
 
@@ -182,7 +182,7 @@ mod tests {
             delete_all: false,
             yes: false,
         };
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         assert!(dispatch_cmd(args, t, OutputMode::Text { no_color: true }).is_ok());
     }
 }

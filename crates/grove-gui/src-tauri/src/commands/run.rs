@@ -317,6 +317,7 @@ pub fn refresh_queue(state: State<'_, AppState>) -> Result<usize, String> {
     Ok(reconciled)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn queue_task(
     state: State<'_, AppState>,
@@ -1104,6 +1105,7 @@ pub fn list_checkpoints(
         .map_err(|e| e.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn start_run_from_issue(
     state: State<'_, AppState>,

@@ -339,7 +339,7 @@ pub(crate) fn drain_task_queue(
         let task_pipeline = task
             .pipeline
             .as_deref()
-            .and_then(|s| grove_core::orchestrator::pipeline::PipelineKind::from_str(s));
+            .and_then(grove_core::orchestrator::pipeline::PipelineKind::from_str);
         let run_control_callback: Option<
             std::sync::Arc<
                 dyn Fn(

@@ -212,7 +212,7 @@ pub async fn detect_editors() -> Result<Vec<EditorIntegrationStatusDto>, String>
         ];
 
         Ok(definitions
-            .into_iter()
+            .iter()
             .map(|(id, name, description, commands)| {
                 let search_path = shell_path();
                 let detected = commands.iter().find_map(|command| {

@@ -378,10 +378,7 @@ pub fn conflicts_cmd(a: ConflictsArgs, t: GroveTransport, mode: OutputMode) -> C
     let relevant: Vec<_> = worktrees
         .iter()
         .filter(|w| {
-            let is_active = w
-                .get("active")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let is_active = w.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
             if let Some(ref run_id) = a.show {
                 w.get("run_id")
                     .and_then(|v| v.as_str())
@@ -525,7 +522,7 @@ mod tests {
 
     #[test]
     fn status_cmd_empty_list_renders_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = status_cmd(
             crate::cli::StatusArgs {
                 limit: 20,
@@ -539,7 +536,7 @@ mod tests {
 
     #[test]
     fn status_cmd_json_mode_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = status_cmd(
             crate::cli::StatusArgs {
                 limit: 20,
@@ -553,7 +550,7 @@ mod tests {
 
     #[test]
     fn logs_cmd_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = logs_cmd(
             crate::cli::LogsArgs {
                 run_id: "test-run".into(),
@@ -567,7 +564,7 @@ mod tests {
 
     #[test]
     fn logs_cmd_json_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = logs_cmd(
             crate::cli::LogsArgs {
                 run_id: "test-run".into(),
@@ -581,7 +578,7 @@ mod tests {
 
     #[test]
     fn report_cmd_null_report_text_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = report_cmd(
             crate::cli::ReportArgs {
                 run_id: "test-run".into(),
@@ -594,7 +591,7 @@ mod tests {
 
     #[test]
     fn report_cmd_json_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = report_cmd(
             crate::cli::ReportArgs {
                 run_id: "test-run".into(),
@@ -607,7 +604,7 @@ mod tests {
 
     #[test]
     fn plan_cmd_null_plan_text_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = plan_cmd(
             crate::cli::PlanArgs { run_id: None },
             t,
@@ -618,7 +615,7 @@ mod tests {
 
     #[test]
     fn subtasks_cmd_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = subtasks_cmd(
             crate::cli::SubtasksArgs { run_id: None },
             t,
@@ -629,7 +626,7 @@ mod tests {
 
     #[test]
     fn sessions_cmd_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = sessions_cmd(
             crate::cli::SessionsArgs {
                 run_id: "test-run".into(),
@@ -642,7 +639,7 @@ mod tests {
 
     #[test]
     fn resume_cmd_returns_err_for_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = resume_cmd(
             crate::cli::ResumeArgs {
                 run_id: "test-run".into(),
@@ -655,7 +652,7 @@ mod tests {
 
     #[test]
     fn abort_cmd_returns_err_for_test_transport() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = abort_cmd(
             crate::cli::AbortArgs {
                 run_id: "test-run".into(),
@@ -668,7 +665,7 @@ mod tests {
 
     #[test]
     fn ownership_cmd_empty_ok() {
-        let t = GroveTransport::Test(TestTransport::default());
+        let t = GroveTransport::Test(TestTransport);
         let result = ownership_cmd(
             crate::cli::OwnershipArgs { run_id: None },
             t,

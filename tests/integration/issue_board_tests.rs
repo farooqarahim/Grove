@@ -53,7 +53,7 @@ fn upsert_and_get_roundtrip() {
     let issue = make_issue("gh-100", "github", "open");
     issues_repo::upsert(&conn, &issue, PROJECT).unwrap();
 
-    let id = format!("github:gh-100");
+    let id = "github:gh-100".to_string();
     let fetched = issues_repo::get(&conn, &id).unwrap();
     assert!(fetched.is_some(), "should find the upserted issue");
     let fetched = fetched.unwrap();

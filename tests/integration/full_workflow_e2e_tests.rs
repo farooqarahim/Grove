@@ -701,7 +701,7 @@ fn full_workflow_with_all_f13_features() {
     let evts = events::list_for_run(&conn, run_id).unwrap();
     let evt_types: Vec<&str> = evts.iter().map(|e| e.event_type.as_str()).collect();
     assert!(
-        evt_types.iter().any(|t| *t == "signal_sent"),
+        evt_types.contains(&"signal_sent"),
         "signal_sent events should be in the event log"
     );
 }

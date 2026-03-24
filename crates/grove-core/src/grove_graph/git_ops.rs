@@ -861,8 +861,10 @@ mod tests {
         let graph_id = seed_graph(&conn);
 
         // Enable git_push so finalize actually attempts it.
-        let mut config = crate::grove_graph::GraphConfig::default();
-        config.git_push = true;
+        let config = crate::grove_graph::GraphConfig {
+            git_push: true,
+            ..Default::default()
+        };
         grove_graph_repo::set_graph_config(&conn, &graph_id, &config).unwrap();
 
         // Manually set a branch name on the graph so finalize attempts push.

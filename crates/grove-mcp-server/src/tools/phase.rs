@@ -4,10 +4,12 @@ use serde_json::{json, Value};
 
 use super::helpers::{get_str, get_str_opt, now_iso};
 
+type StageRow = (String, String, i64, String, String, i64, Option<String>);
+
 pub fn get_pipeline_stage(conn: &Connection, params: &Value) -> Result<Value, McpError> {
     let run_id = get_str(params, "run_id")?;
 
-    let result: Option<(String, String, i64, String, String, i64, Option<String>)> = conn
+    let result: Option<StageRow> = conn
         .query_row(
             "SELECT id, stage_name, ordinal, instructions, status, gate_required, gate_context \
              FROM pipeline_stages \

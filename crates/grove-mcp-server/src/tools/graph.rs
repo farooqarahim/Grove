@@ -536,8 +536,6 @@ pub fn get_step_pipeline_state(conn: &Connection, params: &Value) -> Result<Valu
         "done"
     } else if status == "inprogress" {
         "building"
-    } else if status == "open" {
-        "pending"
     } else {
         "pending"
     };
