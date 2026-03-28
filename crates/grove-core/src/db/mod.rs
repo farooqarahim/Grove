@@ -475,10 +475,6 @@ CREATE INDEX IF NOT EXISTS idx_graph_clarifications_graph ON graph_clarification
 UPDATE meta SET value = '53' WHERE key = 'schema_version';\n\
 ";
 
-// Migration 0046 is applied via `fix_runs_waiting_for_gate_constraint` — it
-// rewrites the runs table CHECK constraint in sqlite_master to include the
-// `waiting_for_gate` run state without rebuilding the table.
-
 /// Migration 0034 (repair): add `provider` and `model` tracking to runs and tasks.
 ///
 /// Originally migration 0032, but it was applied after 0033 — causing it to be
@@ -702,7 +698,6 @@ pub fn initialize(project_root: &Path) -> GroveResult<InitDbResult> {
     apply_migration_if_needed(&mut conn, 43, MIGRATION_0043_RUN_PROVIDER_THREAD)?;
     apply_migration_if_needed(&mut conn, 44, MIGRATION_0044_AUTOMATIONS)?;
     apply_migration_if_needed(&mut conn, 45, MIGRATION_0045_AUTOMATION_NOTIFICATIONS)?;
-    fix_runs_waiting_for_gate_constraint(&mut conn)?;
     apply_migration_if_needed(&mut conn, 47, MIGRATION_0047_DISABLE_PHASE_GATES)?;
     apply_migration_if_needed(&mut conn, 48, MIGRATION_0048_CONVERSATION_KIND)?;
     apply_migration_if_needed(&mut conn, 49, MIGRATION_0049_CHAT_KIND)?;
@@ -845,91 +840,11 @@ fn fix_runs_check_constraint(conn: &mut Connection) -> GroveResult<()> {
     Ok(())
 }
 
-fn fix_runs_waiting_for_gate_constraint(conn: &mut Connection) -> GroveResult<()> {
-    let current: i64 = conn
-        .query_row(
-            "SELECT CAST(value AS INTEGER) FROM meta WHERE key='schema_version'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
-
-    if current >= 46 {
-        return Ok(());
-    }
-
-    let current_sql: String = conn
-        .query_row(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap_or_default();
-
-    if current_sql.contains("'waiting_for_gate'") {
-        conn.execute(
-            "UPDATE meta SET value = '46' WHERE key = 'schema_version'",
-            [],
-        )?;
-        return Ok(());
-    }
-
-    // Rebuild the runs table with the correct CHECK constraint instead of using
-    // PRAGMA writable_schema, which can corrupt sqlite_master.
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-
-    tx.execute_batch("
-        CREATE TABLE runs_new (
-            id              TEXT PRIMARY KEY,
-            objective        TEXT NOT NULL,
-            state            TEXT NOT NULL CHECK(state IN ('created','planning','executing','waiting_for_gate','verifying','publishing','merging','completed','failed','paused')),
-            budget_usd       REAL NOT NULL DEFAULT 0,
-            cost_used_usd    REAL NOT NULL DEFAULT 0,
-            publish_status   TEXT NOT NULL DEFAULT 'pending_retry' CHECK(publish_status IN ('pending_retry','published','failed','skipped_no_changes')),
-            publish_error    TEXT,
-            final_commit_sha TEXT,
-            pr_url           TEXT,
-            published_at     TEXT,
-            conversation_id  TEXT REFERENCES conversations(id),
-            provider         TEXT,
-            model            TEXT,
-            provider_thread_id TEXT,
-            pipeline         TEXT,
-            current_agent    TEXT,
-            disable_phase_gates INTEGER NOT NULL DEFAULT 0,
-            created_at       TEXT NOT NULL,
-            updated_at       TEXT NOT NULL
-        );
-        INSERT INTO runs_new
-            SELECT id, objective, state, budget_usd, cost_used_usd,
-                   COALESCE(publish_status, 'pending_retry'), publish_error,
-                   final_commit_sha, pr_url, published_at, conversation_id,
-                   provider, model, provider_thread_id, pipeline, current_agent,
-                   COALESCE(disable_phase_gates, 0),
-                   created_at, updated_at
-            FROM runs;
-        DROP TABLE runs;
-        ALTER TABLE runs_new RENAME TO runs;
-        DROP INDEX IF EXISTS idx_active_run_per_conv;
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_active_run_per_conv
-            ON runs(conversation_id)
-            WHERE state IN ('executing','waiting_for_gate','planning','verifying','publishing','merging');
-        UPDATE meta SET value = '46' WHERE key = 'schema_version';
-    ")?;
-
-    tx.commit()?;
-
-    tracing::info!(
-        "migration 0046: rebuilt runs table with 'waiting_for_gate' in state CHECK constraint"
-    );
-    Ok(())
-}
-
 /// Rewrite the conversations.conversation_kind CHECK constraint to include 'chat'
 /// and 'hive_loom'.
 ///
 /// SQLite does not support ALTER COLUMN, so we use `PRAGMA writable_schema` to
-/// directly edit sqlite_master — same approach as `fix_runs_waiting_for_gate_constraint`.
+/// directly edit sqlite_master.
 /// Repair databases where schema_version >= 55 but `pipeline_stages` table is
 /// missing. This can happen when the consolidated init SQL claimed a version that
 /// didn't include all tables from incremental migrations.
