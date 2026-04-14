@@ -163,3 +163,7 @@ path = "../../tests/integration/signal_handling_tests.rs"
 [[test]]
 name = "query_plan_tests"
 path = "../../tests/integration/query_plan_tests.rs"
+
+[[test]]
+name = "resume_seeding_locked"
+path = "tests/resume_seeding_locked.rs"

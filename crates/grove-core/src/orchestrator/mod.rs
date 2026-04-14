@@ -873,12 +873,12 @@ pub fn execute_objective_with_sink(
     save_stage_checkpoint(&conn, &run_id, "before_executing");
     transitions::apply_transition(&conn, &run_id, RunState::Planning, RunState::Executing)?;
 
-    let seeded_provider_thread_id = if provider.session_continuity_policy()
-        == crate::providers::SessionContinuityPolicy::DetachedResume
-    {
-        options.resume_provider_session_id.as_deref()
-    } else {
-        None
+    let seeded_provider_thread_id = match provider.session_continuity_policy() {
+        crate::providers::SessionContinuityPolicy::DetachedResume
+        | crate::providers::SessionContinuityPolicy::LockedPerProcess => {
+            options.resume_provider_session_id.as_deref()
+        }
+        crate::providers::SessionContinuityPolicy::None => None,
     };
     // Record the provider, model, and any seeded resumable thread for
     // "Continue Task" and same-run detached-resume continuity.
@@ -4078,12 +4078,20 @@ mod tests {
     }
 
     #[test]
-    fn effective_pause_after_skips_pipeline_gates_when_disabled() {
+    fn effective_pause_after_merges_pipeline_gates_even_when_disabled() {
+        // disable_phase_gates is currently a no-op; gates are always merged.
+        // The early-return optimisation was reverted as out-of-scope for B1-0.
         let pause_after = effective_pause_after(
             &[crate::agents::AgentType::Reviewer],
             &[crate::agents::AgentType::BuildPrd],
             true,
         );
-        assert_eq!(pause_after, vec![crate::agents::AgentType::Reviewer]);
+        assert_eq!(
+            pause_after,
+            vec![
+                crate::agents::AgentType::Reviewer,
+                crate::agents::AgentType::BuildPrd,
+            ]
+        );
     }
 }

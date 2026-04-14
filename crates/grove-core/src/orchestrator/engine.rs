@@ -942,12 +942,13 @@ fn run_agents_persistent(
 
     let _gitignore = crate::worktree::gitignore::GitignoreFilter::load(project_root);
     let continuity_policy = provider_arc.session_continuity_policy();
-    let pending_resume: Option<String> =
-        if continuity_policy == crate::providers::SessionContinuityPolicy::DetachedResume {
+    let pending_resume: Option<String> = match continuity_policy {
+        crate::providers::SessionContinuityPolicy::DetachedResume
+        | crate::providers::SessionContinuityPolicy::LockedPerProcess => {
             initial_provider_session_id
-        } else {
-            None
-        };
+        }
+        crate::providers::SessionContinuityPolicy::None => None,
+    };
     // Seed the host with the resume session ID so the first turn can continue
     // an existing coding agent conversation.
     if let Some(ref sid) = pending_resume {
@@ -962,6 +963,10 @@ fn run_agents_persistent(
     let mut stored_decomposition: Option<(TaskDecomposition, PathBuf)> = None;
     let mut decomposition_executed = false;
     let mut spawn_wave_count: u32 = 0;
+    // Whether the resume session ID is still held in host.provider_thread_id for
+    // the first agent. Set to true when pending_resume is Some, cleared after the
+    // first agent consumes it so subsequent agents get a fresh session.
+    let mut resume_held = pending_resume.is_some();
 
     let mut work_plan: Vec<Vec<AgentType>> = work_plan_input.to_vec();
     let mut owned_steps: Option<Vec<PlanStep>> = plan_steps.map(|s| s.to_vec());
@@ -1042,6 +1047,7 @@ fn run_agents_persistent(
                     run_artifacts_dir,
                 )?;
             }
+            resume_held = false; // decomposition consumed stage 0; next stage's agents get a fresh session
             stage_idx += 1;
             continue;
         }
@@ -1052,7 +1058,14 @@ fn run_agents_persistent(
         for &agent_type in &stage {
             // Clear the provider session ID between different agent roles to prevent
             // "session already in use" errors — each agent type gets a fresh session.
-            host.provider_thread_id = None;
+            // Exception: when a resume session ID was seeded before the loop
+            // (pending_resume is Some), the first agent must inherit it; clearing
+            // is deferred until the second agent onward.
+            if resume_held {
+                resume_held = false;
+            } else {
+                host.provider_thread_id = None;
+            }
 
             'agent_run: loop {
                 let _ = crate::db::repositories::phase_checkpoints_repo::update_run_phase(
