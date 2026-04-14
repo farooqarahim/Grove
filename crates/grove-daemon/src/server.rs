@@ -10,6 +10,7 @@ use crate::rpc::envelope::{RpcError, RpcRequest, RpcResponse};
 use crate::rpc::{dispatch, DispatchCtx};
 
 pub async fn serve(cfg: DaemonConfig) -> Result<()> {
+    let _pid_guard = crate::lifecycle::pidfile::PidGuard::acquire(&cfg.pid_path)?;
     if cfg.socket_path.exists() {
         std::fs::remove_file(&cfg.socket_path)
             .with_context(|| format!("remove stale socket {:?}", cfg.socket_path))?;
