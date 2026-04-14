@@ -2,6 +2,7 @@
 members = [
   "crates/grove-core",
   "crates/grove-cli",
+  "crates/grove-daemon",
   "crates/grove-gui/src-tauri",
   "crates/grove-mcp-server",
   "crates/grove-filter",
@@ -58,3 +59,4 @@ sha2 = "0.10"
 notify-rust = "4"
 parking_lot = "0.12"
 criterion = { version = "0.5", features = ["html_reports"] }
+nix = { version = "0.29", default-features = false, features = ["signal"] }

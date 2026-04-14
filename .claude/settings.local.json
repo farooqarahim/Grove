@@ -152,7 +152,8 @@
       "Bash(cargo metadata:*)",
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(p[''''name''''], p[''''version'''']\\) for p in data[''''packages''''] if ''''sqlite'''' in p[''''name''''].lower\\(\\) or ''''rusqlite'''' in p[''''name''''].lower\\(\\)]\")",
       "Bash(grove doctor:*)",
-      "Bash(cargo install:*)"
+      "Bash(cargo install:*)",
+      "Bash(/Users/farooqrahim/work/Grove-Dev/Grove/target/debug/grove daemon:*)"
     ]
   }
 }

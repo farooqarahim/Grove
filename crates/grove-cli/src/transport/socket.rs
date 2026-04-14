@@ -16,6 +16,17 @@ impl SocketTransport {
         Self { sock_path }
     }
 
+    /// Public passthrough to `call` — used by the `grove daemon` lifecycle
+    /// commands that want a raw RPC without going through the `Transport`
+    /// trait surface.
+    pub fn call_raw(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> CliResult<serde_json::Value> {
+        self.call(method, params)
+    }
+
     /// Send a JSON-RPC 2.0 request over the Unix socket and return the result.
     fn call(&self, method: &str, params: serde_json::Value) -> CliResult<serde_json::Value> {
         let stream = UnixStream::connect(&self.sock_path).map_err(|e| {

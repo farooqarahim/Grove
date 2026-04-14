@@ -2655,6 +2655,7 @@ dependencies = [
  "dirs 5.0.1",
  "grove-core",
  "indicatif",
+ "nix 0.29.0",
  "predicates",
  "ratatui",
  "serde",
@@ -2703,6 +2704,23 @@ dependencies = [
  "tracing",
  "uuid",
  "which",
+]
+
+[[package]]
+name = "grove-daemon"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "grove-core",
+ "nix 0.29.0",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3844,6 +3862,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.11.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nodrop"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4491,7 +4521,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "nix",
+ "nix 0.25.1",
  "serial",
  "shared_library",
  "shell-words",

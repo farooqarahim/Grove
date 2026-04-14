@@ -59,6 +59,11 @@ pub enum Commands {
     Publish(PublishArgs),
     Lint(LintArgs),
     Ci(CiArgs),
+    /// Manage the Grove background daemon.
+    Daemon {
+        #[command(subcommand)]
+        cmd: crate::commands::daemon::DaemonCmd,
+    },
     #[cfg(feature = "tui")]
     Tui,
 }

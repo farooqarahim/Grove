@@ -415,6 +415,10 @@ GROVE_MAX_AGENTS=5 grove run "implement feature"
 | `grove conflicts --show <id>` | View merge conflicts |
 | `grove merge-status <conv-id>` | Check merge queue status |
 
+### Daemon (optional)
+
+For sessions that issue many CLI commands in a row, you can run a long-lived background daemon that keeps the orchestrator and SQLite connection warm: `grove daemon start --detach`. The CLI auto-detects a running daemon and routes through it transparently — there is no behavioral difference, and the in-process fallback is used whenever no daemon is running. See [`docs/daemon.md`](docs/daemon.md) for lifecycle, file locations, and troubleshooting.
+
 ### Global flags
 
 ```bash
