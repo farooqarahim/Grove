@@ -37,6 +37,12 @@ pub struct StartRunInput {
     pub model: Option<String>,
     pub permission_mode: Option<String>,
     pub conversation_id: Option<String>,
+    /// If true, resolve (or create) the latest active conversation for the
+    /// project and, if the conversation has a completed session with a
+    /// recorded `provider_session_id`, roll it forward so the provider
+    /// resumes the same multi-turn context. Mirrors multica's `chat_session`
+    /// pattern.
+    pub continue_last: bool,
 }
 
 /// Output of `start_run`.
@@ -90,6 +96,28 @@ pub fn retry_publish_run(workspace_root: &Path, run_id: &str) -> GroveResult<()>
 }
 
 pub fn start_run(workspace_root: &Path, req: StartRunInput) -> GroveResult<StartRunOutput> {
+    // Resolve continue_last at queue time so the queued TaskRecord carries the
+    // conversation_id + resume_provider_session_id. The drain loop then passes
+    // both through to `execute_objective` without re-resolving.
+    let (conversation_id, resume_provider_session_id) = if req.continue_last {
+        let mut conn = DbHandle::new(workspace_root).connect()?;
+        let conv_id = orchestrator::conversation::resolve_conversation(
+            &mut conn,
+            workspace_root,
+            req.conversation_id.as_deref(),
+            true,
+            None,
+            None,
+            orchestrator::conversation::RUN_CONVERSATION_KIND,
+        )?;
+        let resume = crate::db::repositories::sessions_repo::latest_resumable_for_conversation(
+            &conn, &conv_id,
+        )?;
+        (Some(conv_id), resume)
+    } else {
+        (req.conversation_id.clone(), None)
+    };
+
     let task = orchestrator::queue_task(
         workspace_root,
         &req.objective,
@@ -97,8 +125,8 @@ pub fn start_run(workspace_root: &Path, req: StartRunInput) -> GroveResult<Start
         0,
         req.model.as_deref(),
         None,
-        req.conversation_id.as_deref(),
-        None,
+        conversation_id.as_deref(),
+        resume_provider_session_id.as_deref(),
         req.pipeline.as_deref(),
         req.permission_mode.as_deref(),
         false,
@@ -847,4 +875,175 @@ pub fn list_ownership_locks(
 pub fn list_merge_queue(workspace_root: &Path, conversation_id: &str) -> GroveResult<Vec<Value>> {
     let entries = orchestrator::list_merge_queue(workspace_root, conversation_id)?;
     entries.iter().map(to_value).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for [`start_run`] — specifically the `continue_last` rollforward
+    //! path that resolves the latest conversation + resumable session id at
+    //! queue time (the B3 feature).
+
+    use super::*;
+
+    fn fresh_workspace() -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        crate::db::initialize(tmp.path()).expect("db init");
+        tmp
+    }
+
+    #[test]
+    fn start_run_without_continue_last_does_not_populate_resume_id() {
+        let tmp = fresh_workspace();
+        let out = start_run(
+            tmp.path(),
+            StartRunInput {
+                objective: "test-obj".into(),
+                pipeline: None,
+                model: None,
+                permission_mode: None,
+                conversation_id: None,
+                continue_last: false,
+            },
+        )
+        .expect("start_run");
+
+        // Inspect the queued task: resume_provider_session_id must remain None.
+        let conn = crate::db::DbHandle::new(tmp.path())
+            .connect()
+            .expect("connect");
+        let resume: Option<String> = conn
+            .query_row(
+                "SELECT resume_provider_session_id FROM tasks WHERE id=?1",
+                [&out.task_id],
+                |r| r.get(0),
+            )
+            .expect("query task");
+        assert_eq!(
+            resume, None,
+            "continue_last=false must not populate resume id"
+        );
+    }
+
+    #[test]
+    fn start_run_with_continue_last_on_empty_project_creates_conversation_without_resume_id() {
+        let tmp = fresh_workspace();
+        let out = start_run(
+            tmp.path(),
+            StartRunInput {
+                objective: "first-turn".into(),
+                pipeline: None,
+                model: None,
+                permission_mode: None,
+                conversation_id: None,
+                continue_last: true,
+            },
+        )
+        .expect("start_run");
+
+        let conn = crate::db::DbHandle::new(tmp.path())
+            .connect()
+            .expect("connect");
+        // Conversation should have been created and attached to the task.
+        let (conv_id, resume): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT conversation_id, resume_provider_session_id FROM tasks WHERE id=?1",
+                [&out.task_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .expect("query task");
+        assert!(
+            conv_id.is_some(),
+            "continue_last must resolve a conversation_id even on first run"
+        );
+        assert_eq!(
+            resume, None,
+            "first run has no prior session; resume id must stay None"
+        );
+    }
+
+    #[test]
+    fn start_run_with_continue_last_rolls_forward_provider_session_id() {
+        let tmp = fresh_workspace();
+
+        // Turn 1: queue a run so a conversation gets created, then hand-seed a
+        // completed session carrying a provider_session_id (normally written by
+        // the provider layer after the Claude Code subprocess finishes).
+        let turn1 = start_run(
+            tmp.path(),
+            StartRunInput {
+                objective: "turn-1".into(),
+                pipeline: None,
+                model: None,
+                permission_mode: None,
+                conversation_id: None,
+                continue_last: true,
+            },
+        )
+        .expect("start_run turn 1");
+
+        let mut conn = crate::db::DbHandle::new(tmp.path())
+            .connect()
+            .expect("connect");
+        let conv_id: String = conn
+            .query_row(
+                "SELECT conversation_id FROM tasks WHERE id=?1",
+                [&turn1.task_id],
+                |r| r.get(0),
+            )
+            .expect("query conv");
+
+        // Insert a run under that conversation + a completed session with a
+        // recorded provider_session_id.
+        conn.execute(
+            "INSERT INTO runs (id, conversation_id, objective, state, budget_usd, cost_used_usd, created_at, updated_at)
+             VALUES ('run-seed', ?1, 'turn-1', 'completed', 0.0, 0.0, '2024-01-01', '2024-01-01')",
+            [&conv_id],
+        ).expect("insert run");
+        let sess = crate::db::repositories::sessions_repo::SessionRow {
+            id: "sess-seed".into(),
+            run_id: "run-seed".into(),
+            agent_type: "coder".into(),
+            state: "completed".into(),
+            worktree_path: "/tmp/seed".into(),
+            started_at: Some("2024-01-01".into()),
+            ended_at: Some("2024-01-02".into()),
+            created_at: "2024-01-01".into(),
+            updated_at: "2024-01-02".into(),
+            provider_session_id: Some("prov-seed-123".into()),
+            last_heartbeat: None,
+            stalled_since: None,
+            checkpoint_sha: None,
+            parent_checkpoint_sha: None,
+            branch: None,
+            pid: None,
+        };
+        crate::db::repositories::sessions_repo::insert(&mut conn, &sess).expect("insert session");
+
+        // Turn 2: another continue_last run — should pick up `prov-seed-123`.
+        let turn2 = start_run(
+            tmp.path(),
+            StartRunInput {
+                objective: "turn-2".into(),
+                pipeline: None,
+                model: None,
+                permission_mode: None,
+                conversation_id: None,
+                continue_last: true,
+            },
+        )
+        .expect("start_run turn 2");
+
+        let resume: Option<String> = conn
+            .query_row(
+                "SELECT resume_provider_session_id FROM tasks WHERE id=?1",
+                [&turn2.task_id],
+                |r| r.get(0),
+            )
+            .expect("query task 2");
+        assert_eq!(
+            resume,
+            Some("prov-seed-123".into()),
+            "continue_last must roll the prior session's provider id onto the new task"
+        );
+    }
 }

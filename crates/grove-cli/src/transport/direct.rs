@@ -408,6 +408,7 @@ impl Transport for DirectTransport {
             model: req.model,
             permission_mode: req.permission_mode,
             conversation_id: req.conversation_id,
+            continue_last: req.continue_last,
         };
         let out = facade::start_run(&self.workspace_root, input).map_err(CliError::Core)?;
         Ok(RunResult {
