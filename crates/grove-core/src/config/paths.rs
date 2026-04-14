@@ -87,6 +87,21 @@ pub fn logs_dir(project_root: &Path) -> PathBuf {
     grove_dir(project_root).join("logs")
 }
 
+/// `~/.grove/workspaces/<project_uuid>/grove.sock` — daemon Unix domain socket.
+pub fn daemon_socket_path(project_root: &Path) -> PathBuf {
+    project_db_dir(project_root).join("grove.sock")
+}
+
+/// `~/.grove/workspaces/<project_uuid>/grove-daemon.pid` — daemon PID file.
+pub fn daemon_pid_path(project_root: &Path) -> PathBuf {
+    project_db_dir(project_root).join("grove-daemon.pid")
+}
+
+/// `~/.grove/workspaces/<project_uuid>/grove-daemon.log` — daemon log file.
+pub fn daemon_log_path(project_root: &Path) -> PathBuf {
+    project_db_dir(project_root).join("grove-daemon.log")
+}
+
 /// `.grove/log/<conversation_id>/` — markdown run memory for a conversation.
 pub fn conversation_log_dir(project_root: &Path, conversation_id: &str) -> PathBuf {
     grove_dir(project_root).join("log").join(conversation_id)
@@ -271,6 +286,27 @@ mod tests {
             version > 0,
             "schema_version must be positive after migrations"
         );
+    }
+
+    #[test]
+    fn daemon_paths_are_under_project_db_dir() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+
+        let sock = daemon_socket_path(root);
+        let pid = daemon_pid_path(root);
+        let log = daemon_log_path(root);
+
+        let base = project_db_dir(root);
+        assert!(
+            sock.starts_with(&base),
+            "sock {sock:?} not under {base:?}"
+        );
+        assert!(pid.starts_with(&base), "pid {pid:?} not under {base:?}");
+        assert!(log.starts_with(&base), "log {log:?} not under {base:?}");
+        assert_eq!(sock.file_name().unwrap(), "grove.sock");
+        assert_eq!(pid.file_name().unwrap(), "grove-daemon.pid");
+        assert_eq!(log.file_name().unwrap(), "grove-daemon.log");
     }
 
     #[test]
