@@ -11,6 +11,7 @@ pub mod mock;
 pub mod question_detector;
 pub mod registry;
 pub mod retry;
+pub mod session_host;
 pub mod stream_parser;
 pub mod timeout;
 
