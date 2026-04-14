@@ -2655,6 +2655,7 @@ dependencies = [
  "dirs 5.0.1",
  "grove-core",
  "indicatif",
+ "nix 0.29.0",
  "predicates",
  "ratatui",
  "serde",

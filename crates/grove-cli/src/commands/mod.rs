@@ -6,6 +6,7 @@ use crate::transport::GroveTransport;
 pub mod auth;
 pub mod cleanup;
 pub mod conversation;
+pub mod daemon;
 pub mod doctor;
 pub mod git;
 pub mod hooks;
@@ -67,6 +68,7 @@ pub fn dispatch(cli: Cli, transport: GroveTransport) -> CliResult<()> {
         Commands::Worktrees(a) => worktrees::run(a, transport, mode),
         Commands::Cleanup(a) => cleanup::cleanup_cmd(a, transport, mode),
         Commands::Gc(a) => cleanup::gc_cmd(a, transport, mode),
+        Commands::Daemon { cmd } => daemon::run(cmd, p),
         #[cfg(feature = "tui")]
         Commands::Tui => tui_cmd::run(transport),
     }
