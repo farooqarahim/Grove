@@ -564,6 +564,27 @@ Supported events: `session_start`, `user_prompt_submit`, `pre_tool_use`, `post_t
 
 ---
 
+## `grove daemon`
+
+Manage the optional long-lived `grove-daemon` process. See [`docs/daemon.md`](./daemon.md) for the full lifecycle, file locations, and troubleshooting guide.
+
+```bash
+grove daemon <subcommand>
+```
+
+| Subcommand | Description |
+|---|---|
+| `start` | Start the daemon in the foreground (logs to stdout/stderr). |
+| `start --detach` | Start detached; logs to `~/.grove/workspaces/<uuid>/grove-daemon.log`. Returns once the socket is bound (up to 5s). |
+| `stop` | Send SIGTERM to the daemon and wait up to 5s for graceful shutdown. |
+| `status` | Health check via `grove.health` JSON-RPC; prints `pid` and `uptime_ms`. Reports `offline` if the socket is missing. |
+| `logs` | Tail the daemon log file. |
+| `logs -n <N>` | Tail the last `N` lines (default `50`). |
+
+The daemon is opt-in: when it is not running, every `grove` command falls back to the in-process implementation transparently.
+
+---
+
 ## JSON output
 
 Any command supports `--json` for machine-readable output:
