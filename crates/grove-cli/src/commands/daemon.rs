@@ -82,8 +82,27 @@ fn start(project_root: &Path, detach: bool) -> CliResult<()> {
         let child = cmd
             .spawn()
             .map_err(|e| CliError::Other(format!("spawn daemon: {e}")))?;
-        println!("daemon started (pid {})", child.id());
-        Ok(())
+        let pid = child.id();
+
+        let sock_path = grove_core::config::paths::daemon_socket_path(project_root);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if sock_path.exists() && pid_is_live(pid) {
+                println!("daemon started (pid {pid})");
+                return Ok(());
+            }
+            if !pid_is_live(pid) {
+                return Err(CliError::Other(format!(
+                    "daemon exited before becoming ready (pid {pid}); see {}",
+                    log_path.display()
+                )));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        Err(CliError::Other(format!(
+            "daemon did not become ready within 5s (pid {pid}); see {}",
+            log_path.display()
+        )))
     } else {
         let status = cmd
             .status()

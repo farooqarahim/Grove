@@ -237,22 +237,30 @@ pub enum GroveTransport {
 }
 
 impl GroveTransport {
-    #[allow(dead_code)] // called from Task 6 dispatch
-    pub fn detect(project: &std::path::Path, workspace_root: &std::path::Path) -> Self {
-        let local_sock = project.join(".grove/grove.sock");
-        let global_sock = dirs::home_dir()
-            .map(|h| h.join(".grove/grove.sock"))
-            .unwrap_or_default();
-        if local_sock.exists() || global_sock.exists() {
-            let sock = if local_sock.exists() {
-                local_sock
-            } else {
-                global_sock
-            };
-            GroveTransport::Socket(socket::SocketTransport::new(sock))
-        } else {
-            GroveTransport::Direct(direct::DirectTransport::new(project, workspace_root))
+    /// Auto-detect transport for `project_root`.
+    ///
+    /// Picks `Socket` only if a daemon socket exists *and* a connect attempt
+    /// succeeds — a stale socket file (left over from an unclean shutdown)
+    /// will not fool the probe into picking an unreachable transport.
+    /// Falls back to `Direct` otherwise. The workspace_root is derived from
+    /// `project_root` via `paths::project_db_dir`, so callers don't need to
+    /// resolve it separately.
+    pub fn detect_for_path(project_root: &std::path::Path) -> Self {
+        let sock = grove_core::config::paths::daemon_socket_path(project_root);
+        if sock.exists() && std::os::unix::net::UnixStream::connect(&sock).is_ok() {
+            return GroveTransport::Socket(socket::SocketTransport::new(sock));
         }
+        let workspace_root = grove_core::config::paths::project_db_dir(project_root);
+        GroveTransport::Direct(direct::DirectTransport::new(project_root, &workspace_root))
+    }
+
+    #[allow(dead_code)] // called from main.rs
+    pub fn detect(project: &std::path::Path, _workspace_root: &std::path::Path) -> Self {
+        // Kept for source compatibility with the existing `main.rs` call site.
+        // The workspace_root argument is now ignored — `detect_for_path`
+        // re-derives it from `project_root`, which keeps both code paths
+        // (CLI and tests) on a single resolution rule.
+        Self::detect_for_path(project)
     }
 }
 
@@ -1350,5 +1358,32 @@ mod tests {
     fn test_transport_list_runs_returns_empty() {
         let t = TestTransport;
         assert!(t.list_runs(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn detect_falls_back_to_direct_when_socket_unreachable() {
+        // Create a tempdir and place a regular file at the expected socket
+        // path. The file exists (so a naive `sock.exists()` check would
+        // pick Socket), but it is not a live socket — a connect attempt
+        // must fail and `detect_for_path` must therefore return Direct.
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let sock = grove_core::config::paths::daemon_socket_path(project);
+        if let Some(parent) = sock.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&sock, b"").unwrap();
+        let t = super::GroveTransport::detect_for_path(project);
+        assert!(
+            matches!(t, super::GroveTransport::Direct(_)),
+            "expected Direct fallback when socket file exists but is not a live socket"
+        );
+    }
+
+    #[test]
+    fn detect_falls_back_to_direct_when_no_socket_at_all() {
+        let tmp = tempfile::tempdir().unwrap();
+        let t = super::GroveTransport::detect_for_path(tmp.path());
+        assert!(matches!(t, super::GroveTransport::Direct(_)));
     }
 }
