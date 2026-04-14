@@ -94,10 +94,12 @@ pub async fn start_run(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcErr
         .await
         .map_err(join_err)?
         .map_err(internal)?;
+    ctx.drain_signal.notify();
     to_value(&out)
 }
 
 pub async fn drain_queue(ctx: &DispatchCtx, _params: Value) -> Result<Value, RpcError> {
+    ctx.drain_signal.notify();
     let root = ctx.cfg.project_root.clone();
     tokio::task::spawn_blocking(move || grove_core::facade::drain_queue(&root))
         .await

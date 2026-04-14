@@ -1914,6 +1914,35 @@ pub fn retry_task(project_root: &Path, task_id: &str) -> GroveResult<TaskRecord>
     )
 }
 
+/// Resolve the on-disk project root for a queued task.
+///
+/// Returns the root of the project linked to the task's conversation. Falls
+/// back to `workspace_root` when the task has no conversation, the DB is
+/// unreachable, or the conversation/project rows are missing — callers can
+/// treat this as "best effort, never panics".
+///
+/// Used by queue drainers (GUI + daemon) to know which directory to run the
+/// agent in.
+pub fn resolve_project_root_for_task(workspace_root: &Path, task: &TaskRecord) -> PathBuf {
+    let conv_id = match task.conversation_id.as_deref() {
+        Some(id) => id,
+        None => return workspace_root.to_path_buf(),
+    };
+    let handle = DbHandle::new(workspace_root);
+    let conn = match handle.connect() {
+        Ok(c) => c,
+        Err(_) => return workspace_root.to_path_buf(),
+    };
+    let conv = match crate::db::repositories::conversations_repo::get(&conn, conv_id) {
+        Ok(c) => c,
+        Err(_) => return workspace_root.to_path_buf(),
+    };
+    match crate::db::repositories::projects_repo::get(&conn, &conv.project_id) {
+        Ok(p) => PathBuf::from(&p.root_path),
+        Err(_) => workspace_root.to_path_buf(),
+    }
+}
+
 /// Delete a completed or cancelled task (used for auto-cleanup after drain).
 pub fn delete_completed_task(project_root: &Path, task_id: &str) -> GroveResult<()> {
     let handle = DbHandle::new(project_root);

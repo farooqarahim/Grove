@@ -8,6 +8,7 @@
 //! When you add a new RPC to `dispatch()`, append the method name below.
 
 use grove_daemon::config::DaemonConfig;
+use grove_daemon::queue_drain::DrainSignal;
 use grove_daemon::rpc::envelope::{RpcRequest, RpcResponse};
 use grove_daemon::rpc::{DispatchCtx, dispatch};
 use serde_json::{Value, json};
@@ -109,7 +110,7 @@ fn make_ctx() -> DispatchCtx {
     // Leak the tempdir so paths stay valid for the test's lifetime;
     // OS will reclaim on process exit.
     std::mem::forget(tmp);
-    DispatchCtx::new(cfg)
+    DispatchCtx::new(cfg, DrainSignal::new())
 }
 
 #[tokio::test]

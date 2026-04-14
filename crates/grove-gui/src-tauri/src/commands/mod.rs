@@ -43,28 +43,7 @@ pub(crate) fn emit(handle: &tauri::AppHandle, event: &str, payload: serde_json::
 
 /// Resolve the project root for a queued task by looking up the task's
 /// conversation → project. Falls back to `workspace_root` if unresolvable.
-pub(crate) fn resolve_project_root_for_task(
-    workspace_root: &std::path::Path,
-    task: &grove_core::orchestrator::TaskRecord,
-) -> std::path::PathBuf {
-    let conv_id = match task.conversation_id.as_deref() {
-        Some(id) => id,
-        None => return workspace_root.to_path_buf(),
-    };
-    let handle = grove_core::db::DbHandle::new(workspace_root);
-    let conn = match handle.connect() {
-        Ok(c) => c,
-        Err(_) => return workspace_root.to_path_buf(),
-    };
-    let conv = match grove_core::db::repositories::conversations_repo::get(&conn, conv_id) {
-        Ok(c) => c,
-        Err(_) => return workspace_root.to_path_buf(),
-    };
-    match grove_core::db::repositories::projects_repo::get(&conn, &conv.project_id) {
-        Ok(p) => std::path::PathBuf::from(&p.root_path),
-        Err(_) => workspace_root.to_path_buf(),
-    }
-}
+pub(crate) use grove_core::orchestrator::resolve_project_root_for_task;
 
 pub(crate) fn ensure_project_supports_local_runs(project: &ProjectRow) -> Result<(), String> {
     if grove_core::orchestrator::project_supports_local_runs(project) {

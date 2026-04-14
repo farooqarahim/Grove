@@ -18,6 +18,7 @@ pub mod workspace;
 pub mod worktrees;
 
 use crate::config::DaemonConfig;
+use crate::queue_drain::DrainSignal;
 use envelope::{RpcError, RpcRequest, RpcResponse};
 use std::sync::Arc;
 use std::time::Instant;
@@ -26,13 +27,15 @@ use std::time::Instant;
 pub struct DispatchCtx {
     pub cfg: Arc<DaemonConfig>,
     pub started_at: Instant,
+    pub drain_signal: DrainSignal,
 }
 
 impl DispatchCtx {
-    pub fn new(cfg: DaemonConfig) -> Self {
+    pub fn new(cfg: DaemonConfig, drain_signal: DrainSignal) -> Self {
         Self {
             cfg: Arc::new(cfg),
             started_at: Instant::now(),
+            drain_signal,
         }
     }
 }

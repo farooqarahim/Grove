@@ -6,6 +6,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info, warn};
 
 use crate::config::DaemonConfig;
+use crate::queue_drain::{self, DrainShutdown, DrainSignal};
 use crate::rpc::envelope::{RpcError, RpcRequest, RpcResponse};
 use crate::rpc::{DispatchCtx, dispatch};
 
@@ -27,7 +28,20 @@ pub async fn serve(cfg: DaemonConfig) -> Result<()> {
     }
 
     info!(path = %cfg.socket_path.display(), "grove-daemon listening");
-    let ctx = Arc::new(DispatchCtx::new(cfg));
+
+    let drain_signal = DrainSignal::new();
+    let drain_shutdown = DrainShutdown::new();
+    let drain_cfg = cfg.clone();
+    let drain_handle = tokio::spawn(queue_drain::run(
+        drain_cfg,
+        drain_signal.clone(),
+        drain_shutdown.clone(),
+    ));
+    // Kick the drain once at startup so any tasks enqueued while the daemon
+    // was offline are picked up immediately rather than waiting a full tick.
+    drain_signal.notify();
+
+    let ctx = Arc::new(DispatchCtx::new(cfg, drain_signal));
 
     let mut sigterm = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
     let mut sigint = signal(SignalKind::interrupt()).context("install SIGINT handler")?;
@@ -58,6 +72,11 @@ pub async fn serve(cfg: DaemonConfig) -> Result<()> {
                 break;
             }
         }
+    }
+
+    drain_shutdown.shutdown();
+    if let Err(e) = drain_handle.await {
+        warn!(error = %e, "drain loop join error");
     }
 
     let _ = std::fs::remove_file(&ctx.cfg.socket_path);

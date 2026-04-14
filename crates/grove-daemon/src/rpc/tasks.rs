@@ -44,6 +44,7 @@ pub async fn queue_task(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcEr
     .await
     .map_err(join_err)?
     .map_err(internal)?;
+    ctx.drain_signal.notify();
     to_value(&task)
 }
 

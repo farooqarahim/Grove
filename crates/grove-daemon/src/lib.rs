@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod lifecycle;
+pub mod queue_drain;
 pub mod rpc;
 pub mod server;
 
