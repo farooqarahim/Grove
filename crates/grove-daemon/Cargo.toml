@@ -1,0 +1,30 @@
+[package]
+name = "grove-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "grove-daemon"
+path = "src/main.rs"
+
+[dependencies]
+grove-core = { path = "../grove-core" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "signal", "macros", "time", "sync"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+nix = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
