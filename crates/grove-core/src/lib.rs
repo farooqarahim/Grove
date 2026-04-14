@@ -9,6 +9,7 @@ pub mod db;
 pub mod doctor;
 pub mod errors;
 pub mod events;
+pub mod facade;
 pub mod git;
 pub mod grove_graph;
 pub mod hooks;
