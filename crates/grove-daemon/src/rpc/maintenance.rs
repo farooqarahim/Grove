@@ -1,5 +1,5 @@
 use super::envelope::RpcError;
-use super::{internal, invalid_params, join_err, DispatchCtx};
+use super::{DispatchCtx, internal, invalid_params, join_err};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -38,11 +38,10 @@ struct GcParams {
 pub async fn run_gc(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcError> {
     let GcParams { dry_run } = serde_json::from_value(params).map_err(invalid_params)?;
     let root = ctx.cfg.project_root.clone();
-    let out = tokio::task::spawn_blocking(move || {
-        grove_core::facade::run_gc(&root, &root, dry_run)
-    })
-    .await
-    .map_err(join_err)?
-    .map_err(internal)?;
+    let out =
+        tokio::task::spawn_blocking(move || grove_core::facade::run_gc(&root, &root, dry_run))
+            .await
+            .map_err(join_err)?
+            .map_err(internal)?;
     Ok(out)
 }

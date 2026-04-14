@@ -1,5 +1,5 @@
 use super::envelope::RpcError;
-use super::{internal, invalid_params, join_err, to_value, DispatchCtx};
+use super::{DispatchCtx, internal, invalid_params, join_err, to_value};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -201,11 +201,10 @@ pub async fn reopen_issue(ctx: &DispatchCtx, params: Value) -> Result<Value, Rpc
 pub async fn activity_issue(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcError> {
     let IdParams { id } = serde_json::from_value(params).map_err(invalid_params)?;
     let root = ctx.cfg.project_root.clone();
-    let rows =
-        tokio::task::spawn_blocking(move || grove_core::facade::activity_issue(&root, &id))
-            .await
-            .map_err(join_err)?
-            .map_err(internal)?;
+    let rows = tokio::task::spawn_blocking(move || grove_core::facade::activity_issue(&root, &id))
+        .await
+        .map_err(join_err)?
+        .map_err(internal)?;
     to_value(&rows)
 }
 

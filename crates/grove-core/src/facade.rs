@@ -13,14 +13,14 @@
 
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::config::loader::load_config;
+use crate::db::DbHandle;
 use crate::db::repositories::{
     conversations_repo::ConversationRow, issues_repo, projects_repo::ProjectRow,
     workspaces_repo::WorkspaceRow,
 };
-use crate::db::DbHandle;
 use crate::llm::{AuthInfo, AuthStore, LlmProviderKind, LlmRouter};
 use crate::orchestrator::{self, RunRecord, TaskRecord};
 use crate::tracker;
@@ -304,7 +304,12 @@ pub fn create_issue(
 pub fn close_issue(workspace_root: &Path, id: &str) -> GroveResult<()> {
     let db = DbHandle::new(workspace_root);
     let mut conn = db.connect()?;
-    issues_repo::update_status(&mut conn, id, "closed", tracker::status::CanonicalStatus::Done)
+    issues_repo::update_status(
+        &mut conn,
+        id,
+        "closed",
+        tracker::status::CanonicalStatus::Done,
+    )
 }
 
 pub fn search_issues(
@@ -362,13 +367,8 @@ pub fn sync_issues(
             "linear" => Box::new(tracker::linear::LinearTracker::new(&cfg.tracker.linear)),
             other => return Err(badarg(format!("unknown provider: {other}"))),
         };
-        let r = tracker::sync::sync_provider(
-            &mut conn,
-            backend.as_ref(),
-            &project.id,
-            incremental,
-            0,
-        );
+        let r =
+            tracker::sync::sync_provider(&mut conn, backend.as_ref(), &project.id, incremental, 0);
         tracker::sync::MultiSyncResult {
             total_new: r.new_count,
             total_updated: r.updated_count,
@@ -432,7 +432,12 @@ pub fn move_issue(workspace_root: &Path, id: &str, status: &str) -> GroveResult<
 pub fn reopen_issue(workspace_root: &Path, id: &str) -> GroveResult<()> {
     let db = DbHandle::new(workspace_root);
     let mut conn = db.connect()?;
-    issues_repo::update_status(&mut conn, id, "open", tracker::status::CanonicalStatus::Open)
+    issues_repo::update_status(
+        &mut conn,
+        id,
+        "open",
+        tracker::status::CanonicalStatus::Open,
+    )
 }
 
 pub fn activity_issue(workspace_root: &Path, id: &str) -> GroveResult<Vec<Value>> {

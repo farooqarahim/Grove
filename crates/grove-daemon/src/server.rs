@@ -2,12 +2,12 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info, warn};
 
 use crate::config::DaemonConfig;
 use crate::rpc::envelope::{RpcError, RpcRequest, RpcResponse};
-use crate::rpc::{dispatch, DispatchCtx};
+use crate::rpc::{DispatchCtx, dispatch};
 
 pub async fn serve(cfg: DaemonConfig) -> Result<()> {
     let _pid_guard = crate::lifecycle::pidfile::PidGuard::acquire(&cfg.pid_path)?;

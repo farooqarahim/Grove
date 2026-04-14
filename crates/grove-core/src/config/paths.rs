@@ -298,10 +298,7 @@ mod tests {
         let log = daemon_log_path(root);
 
         let base = project_db_dir(root);
-        assert!(
-            sock.starts_with(&base),
-            "sock {sock:?} not under {base:?}"
-        );
+        assert!(sock.starts_with(&base), "sock {sock:?} not under {base:?}");
         assert!(pid.starts_with(&base), "pid {pid:?} not under {base:?}");
         assert!(log.starts_with(&base), "log {log:?} not under {base:?}");
         assert_eq!(sock.file_name().unwrap(), "grove.sock");

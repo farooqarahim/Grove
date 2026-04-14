@@ -125,7 +125,7 @@ fn stop(project_root: &Path) -> CliResult<()> {
 
     #[cfg(unix)]
     {
-        use nix::sys::signal::{kill, Signal};
+        use nix::sys::signal::{Signal, kill};
         use nix::unistd::Pid;
         kill(Pid::from_raw(pid as i32), Signal::SIGTERM)
             .map_err(|e| CliError::Other(format!("send SIGTERM: {e}")))?;

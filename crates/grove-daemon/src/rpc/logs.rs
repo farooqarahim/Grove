@@ -1,5 +1,5 @@
 use super::envelope::RpcError;
-use super::{internal, invalid_params, join_err, to_value, DispatchCtx};
+use super::{DispatchCtx, internal, invalid_params, join_err, to_value};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -11,8 +11,7 @@ struct GetLogsParams {
 }
 
 pub async fn get_logs(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcError> {
-    let GetLogsParams { run_id, all } =
-        serde_json::from_value(params).map_err(invalid_params)?;
+    let GetLogsParams { run_id, all } = serde_json::from_value(params).map_err(invalid_params)?;
     let root = ctx.cfg.project_root.clone();
     let rows =
         tokio::task::spawn_blocking(move || grove_core::facade::get_logs(&root, &run_id, all))
@@ -40,12 +39,11 @@ struct RunIdOptParams {
 pub async fn get_plan(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcError> {
     let RunIdOptParams { run_id } = serde_json::from_value(params).map_err(invalid_params)?;
     let root = ctx.cfg.project_root.clone();
-    let out = tokio::task::spawn_blocking(move || {
-        grove_core::facade::get_plan(&root, run_id.as_deref())
-    })
-    .await
-    .map_err(join_err)?
-    .map_err(internal)?;
+    let out =
+        tokio::task::spawn_blocking(move || grove_core::facade::get_plan(&root, run_id.as_deref()))
+            .await
+            .map_err(join_err)?
+            .map_err(internal)?;
     Ok(out)
 }
 

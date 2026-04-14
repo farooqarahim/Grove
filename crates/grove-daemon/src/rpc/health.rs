@@ -1,6 +1,6 @@
-use super::envelope::RpcError;
 use super::DispatchCtx;
-use serde_json::{json, Value};
+use super::envelope::RpcError;
+use serde_json::{Value, json};
 use std::time::Instant;
 
 pub async fn handle(ctx: &DispatchCtx, _params: Value) -> Result<Value, RpcError> {

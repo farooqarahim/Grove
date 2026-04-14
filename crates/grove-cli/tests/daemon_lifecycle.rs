@@ -34,9 +34,7 @@ fn start_status_stop_roundtrip() {
             .args(["daemon", "status"])
             .output()
             .unwrap();
-        if out.status.success()
-            && String::from_utf8_lossy(&out.stdout).contains("status: ok")
-        {
+        if out.status.success() && String::from_utf8_lossy(&out.stdout).contains("status: ok") {
             break;
         }
         if Instant::now() > deadline {

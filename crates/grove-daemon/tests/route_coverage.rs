@@ -9,8 +9,8 @@
 
 use grove_daemon::config::DaemonConfig;
 use grove_daemon::rpc::envelope::{RpcRequest, RpcResponse};
-use grove_daemon::rpc::{dispatch, DispatchCtx};
-use serde_json::{json, Value};
+use grove_daemon::rpc::{DispatchCtx, dispatch};
+use serde_json::{Value, json};
 
 /// Method-not-found per JSON-RPC 2.0.
 const METHOD_NOT_FOUND: i32 = -32601;

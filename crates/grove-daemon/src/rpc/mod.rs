@@ -55,10 +55,7 @@ pub(crate) fn to_value<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, 
 
 pub async fn dispatch(ctx: &DispatchCtx, req: RpcRequest) -> RpcResponse {
     if req.jsonrpc != "2.0" {
-        return RpcResponse::err(
-            req.id,
-            RpcError::invalid_request("jsonrpc must be \"2.0\""),
-        );
+        return RpcResponse::err(req.id, RpcError::invalid_request("jsonrpc must be \"2.0\""));
     }
     let id = req.id.clone();
     let result = match req.method.as_str() {

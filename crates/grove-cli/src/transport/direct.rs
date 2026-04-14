@@ -78,8 +78,7 @@ impl Transport for DirectTransport {
         limit: i64,
         provider: Option<&str>,
     ) -> CliResult<Vec<serde_json::Value>> {
-        facade::search_issues(&self.workspace_root, query, limit, provider)
-            .map_err(CliError::Core)
+        facade::search_issues(&self.workspace_root, query, limit, provider).map_err(CliError::Core)
     }
 
     fn sync_issues(&self, provider: Option<&str>, full: bool) -> CliResult<serde_json::Value> {
