@@ -309,7 +309,8 @@ pub fn list_graphs_for_conversation(
     conversation_id: &str,
 ) -> GroveResult<Vec<GraphRow>> {
     let mut stmt = conn.prepare_cached(&format!(
-        "SELECT {GRAPH_COLS} FROM grove_graphs WHERE conversation_id=?1 ORDER BY created_at DESC"
+        "SELECT {GRAPH_COLS} FROM grove_graphs WHERE conversation_id=?1 \
+         ORDER BY created_at DESC, rowid DESC"
     ))?;
     let rows = stmt
         .query_map([conversation_id], map_graph_row)?

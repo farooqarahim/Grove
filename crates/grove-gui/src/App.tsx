@@ -53,6 +53,7 @@ export default function App() {
   // "New Run" buttons always leave this null (fresh run, no thread resumption).
   const [newRunResumeRunId, setNewRunResumeRunId] = useState<string | null>(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [projectView, setProjectView] = useState<"home" | "settings">("home");
   const [showCommit, setShowCommit] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -225,6 +226,7 @@ export default function App() {
     setSelectedProjectId(id);
     localStorage.setItem("grove:last-project-id", id);
     setSelectedConversationId(null);
+    setProjectView("home");
     setLatestRun(null); // clear stale run so RightPanel switches to project-based files
   };
 
@@ -413,6 +415,10 @@ export default function App() {
               setSelectedConversationId(id);
               setScreen("sessions");
             }}
+            onSelectProject={(id) => {
+              handleSelectProject(id);
+              setScreen("sessions");
+            }}
           />
         );
       case "issues":
@@ -450,12 +456,15 @@ export default function App() {
                 selectedProjectId={selectedProjectId}
                 onSelectProject={handleSelectProject}
                 onCreateProject={() => setShowCreateProject(true)}
+                projectView={projectView}
+                onSetProjectView={setProjectView}
               />
             }
             main={
               <MainPanel
                 conversationId={selectedConversationId}
                 selectedProject={selectedProject}
+                projectView={projectView}
                 onNewRun={() => {
                   if (selectedProject?.source_kind === "ssh") {
                     showAppToast("SSH projects support shell access only. Agent runs still require a local checkout.", "error");
@@ -470,6 +479,7 @@ export default function App() {
                     handleOpenNewRun();
                   }
                 }}
+                onSelectConversation={setSelectedConversationId}
                 onContinueTask={handleContinueTask}
                 onViewDiff={handleViewDiff}
               />

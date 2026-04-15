@@ -1,37 +1,32 @@
 import {
-  Arrow, BarChart, Check, ChevronDown, ChevronR, Clock, Commit, Copy,
-  FileText, ForkIcon, HDotsIcon, Plus, PullRequest, Refresh, Shield,
+  Arrow, BarChart, Check, ChevronR, Clock, Commit, Copy,
+  ForkIcon, HDotsIcon, Plus, PullRequest, Refresh, Shield,
   statusColor, StatusIcon, Terminal, Undo, Zap,
 } from "@/components/ui/icons";
+import type { LogEntry, PhaseCheckpointDto, QaMessageDto } from "@/lib/api";
 import {
   abortRun,
   forkRunWorktree,
   getRunReport,
-  listMergeQueue,
-  listOwnershipLocks,
   listPhaseCheckpoints,
-  listPlanSteps,
   listQaMessages,
   listRunMessages,
   listSessions,
   listSignals,
-  listSubtasks,
   markSignalRead,
   readSessionLog,
   resumeRun,
   retryPublishRun,
   sendAgentMessage,
 } from "@/lib/api";
-import type { LogEntry, PhaseCheckpointDto, QaMessageDto } from "@/lib/api";
-import type { StreamOutputEvent } from "@/types/thread";
 import { formatDuration, relativeTime } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { formatRunAgentLabel } from "@/lib/runLabels";
 import { C } from "@/lib/theme";
-import type { MessageRow, PlanStep, RunRecord, RunReport, SessionRecord } from "@/types";
+import type { MessageRow, RunRecord, RunReport, SessionRecord } from "@/types";
+import type { StreamOutputEvent } from "@/types/thread";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useState, useRef, useEffect, memo } from "react";
-import { AgentDetail } from "./AgentDetail";
+import { memo, useEffect, useRef, useState } from "react";
 import { PhaseGateBlock } from "./PhaseGateBlock";
 import { PipelineViz } from "./PipelineViz";
 import { QaCard } from "./QaCard";
@@ -43,31 +38,31 @@ const RESUMABLE_STATES = ["failed", "paused"];
 const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 const STATE_BADGE: Record<string, { label: string; color: string }> = {
-  completed:        { label: "Completed",        color: "green" },
-  failed:           { label: "Failed",           color: "red" },
-  executing:        { label: "Executing",        color: "blue" },
+  completed: { label: "Completed", color: "green" },
+  failed: { label: "Failed", color: "red" },
+  executing: { label: "Executing", color: "blue" },
   waiting_for_gate: { label: "Waiting For Gate", color: "amber" },
-  planning:         { label: "Planning",         color: "blue" },
-  verifying:        { label: "Verifying",        color: "amber" },
-  publishing:       { label: "Publishing",       color: "blue" },
-  merging:          { label: "Merging",          color: "amber" },
-  paused:           { label: "Paused",           color: "gray" },
+  planning: { label: "Planning", color: "blue" },
+  verifying: { label: "Verifying", color: "amber" },
+  publishing: { label: "Publishing", color: "blue" },
+  merging: { label: "Merging", color: "amber" },
+  paused: { label: "Paused", color: "gray" },
 };
 
 const PUBLISH_BADGE: Record<string, { label: string; color: string }> = {
-  published:          { label: "Published",       color: "blue" },
-  failed:             { label: "Publish Failed",  color: "red" },
-  skipped_no_changes: { label: "No Changes",      color: "gray" },
-  pending_retry:      { label: "Pending Publish",  color: "amber" },
+  published: { label: "Published", color: "blue" },
+  failed: { label: "Publish Failed", color: "red" },
+  skipped_no_changes: { label: "No Changes", color: "gray" },
+  pending_retry: { label: "Pending Publish", color: "amber" },
 };
 
 const BADGE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  green:  { bg: "rgba(62,207,142,0.08)",  border: "rgba(62,207,142,0.2)",   text: "#3ecf8e" },
-  purple: { bg: "rgba(167,139,250,0.1)",  border: "rgba(167,139,250,0.2)",  text: "#a78bfa" },
-  amber:  { bg: "rgba(245,158,11,0.1)",   border: "rgba(245,158,11,0.25)",  text: "#f59e0b" },
-  blue:   { bg: "rgba(96,165,250,0.08)",  border: "rgba(96,165,250,0.2)",   text: "#60a5fa" },
-  red:    { bg: "rgba(248,113,113,0.1)",  border: "rgba(248,113,113,0.3)",  text: "#f87171" },
-  gray:   { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.08)", text: "#8b8d98" },
+  green: { bg: "rgba(62,207,142,0.08)", border: "rgba(62,207,142,0.2)", text: "#3ecf8e" },
+  purple: { bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.2)", text: "#a78bfa" },
+  amber: { bg: "rgba(245,158,11,0.1)", border: "rgba(245,158,11,0.25)", text: "#f59e0b" },
+  blue: { bg: "rgba(96,165,250,0.08)", border: "rgba(96,165,250,0.2)", text: "#60a5fa" },
+  red: { bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.3)", text: "#f87171" },
+  gray: { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.08)", text: "#8b8d98" },
 };
 
 const AGENT_BADGE_COLOR: Record<string, "purple" | "amber" | "green" | "blue" | "gray"> = {
@@ -80,32 +75,32 @@ function agentBadgeColor(agentType?: string): "purple" | "amber" | "green" | "bl
 }
 
 const AGENT_ICONS: Record<string, { icon: (size: number) => React.ReactNode; color: string; bg: string; border: string }> = {
-  builder:   { icon: (s) => <Zap size={s} />,    color: "#a78bfa", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.2)" },
-  validator: { icon: (s) => <Shield size={s} />,  color: "#f59e0b", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)" },
-  judge:     { icon: (s) => <Shield size={s} />,  color: "#f59e0b", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)" },
+  builder: { icon: (s) => <Zap size={s} />, color: "#a78bfa", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.2)" },
+  validator: { icon: (s) => <Shield size={s} />, color: "#f59e0b", bg: "rgba(245,158,11,0.1)", border: "rgba(245,158,11,0.25)" },
+  judge: { icon: (s) => <Shield size={s} />, color: "#f59e0b", bg: "rgba(245,158,11,0.1)", border: "rgba(245,158,11,0.25)" },
 };
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 
 const P = {
-  bg:          "#0e0f11",
-  bgCard:      "#16171b",
-  bgSurface:   "#1c1d22",
-  bgHover:     "#22242a",
-  bgElevated:  "#1a1b20",
-  border:      "#2a2c33",
-  borderSubtle:"#222329",
-  text:        "#e2e4e9",
-  textMuted:   "#8b8d98",
-  textFaint:   "#5c5e6a",
-  accent:      "#3ecf8e",
+  bg: "#0e0f11",
+  bgCard: "#16171b",
+  bgSurface: "#1c1d22",
+  bgHover: "#22242a",
+  bgElevated: "#1a1b20",
+  border: "#2a2c33",
+  borderSubtle: "#222329",
+  text: "#e2e4e9",
+  textMuted: "#8b8d98",
+  textFaint: "#5c5e6a",
+  accent: "#3ecf8e",
   accentMuted: "#2a9d6a",
-  accentBg:    "rgba(62,207,142,0.08)",
-  accentBorder:"rgba(62,207,142,0.2)",
-  blue:        "#60a5fa",
-  blueBorder:  "rgba(96,165,250,0.2)",
-  red:         "#f87171",
-  coral:       "#fb923c",
+  accentBg: "rgba(62,207,142,0.08)",
+  accentBorder: "rgba(62,207,142,0.2)",
+  blue: "#60a5fa",
+  blueBorder: "rgba(96,165,250,0.2)",
+  red: "#f87171",
+  coral: "#fb923c",
 } as const;
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -140,31 +135,6 @@ function IconBtn({ children, onClick, tooltip }: { children: React.ReactNode; on
   );
 }
 
-function CheckItem({ label, passed = true, failed = false, children }: { label: string; passed?: boolean; failed?: boolean; children?: React.ReactNode }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8,
-      padding: "4px 0",
-      fontSize: 12.5, color: failed ? P.red : P.textMuted, lineHeight: "22px",
-    }}>
-      <div style={{
-        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-        background: passed ? P.accentBg : failed ? "rgba(248,113,113,0.1)" : "rgba(255,255,255,0.04)",
-        border: `1.5px solid ${passed ? P.accent : failed ? P.red : "rgba(255,255,255,0.08)"}`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: passed ? P.accent : failed ? P.red : P.textFaint,
-      }}>
-        {passed && <Check size={10} />}
-        {failed && <span style={{ fontSize: 10, fontWeight: 700, lineHeight: 1 }}>×</span>}
-      </div>
-      <span style={{ flex: 1, fontSize: 12.5, fontFamily: C.mono, color: P.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
 // ── Main Component ───────────────────────────────────────────────────────────
 
 interface RunCardProps {
@@ -172,17 +142,15 @@ interface RunCardProps {
   number: number;
   isExpanded: boolean;
   onToggle: () => void;
-  expandedAgentKey: string | null;
-  onToggleAgent: (key: string) => void;
   onContinueTask?: (conversationId: string, runId: string) => void;
   onViewDiff?: (runId: string) => void;
 }
 
-export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle, expandedAgentKey, onToggleAgent, onContinueTask, onViewDiff }: RunCardProps) {
+export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle, onContinueTask, onViewDiff }: RunCardProps) {
   const isActive = ACTIVE_STATES.includes(run.state);
   const isDone = !isActive;
   const fallback = isDone ? false : 60000;
-  const [runTab, setRunTab] = useState<"activity" | "agents" | "tasks" | "logs">("activity");
+  const [runTab, setRunTab] = useState<"activity" | "logs" | "report">("activity");
   const sessionRefetchInterval =
     isExpanded && isActive && runTab === "logs" ? 3000
       : isExpanded ? fallback
@@ -197,10 +165,6 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
     refetchInterval: sessionRefetchInterval,
     staleTime: runTab === "logs" ? 0 : 30000,
   });
-  const { data: planSteps } = useQuery({ queryKey: qk.planSteps(run.id), queryFn: () => listPlanSteps(run.id), enabled: isExpanded, refetchInterval: isExpanded ? fallback : false, staleTime: 30000 });
-  const { data: subtasks } = useQuery({ queryKey: qk.subtasks(run.id), queryFn: () => listSubtasks(run.id), enabled: isExpanded, refetchInterval: isExpanded ? fallback : false, staleTime: 30000 });
-  const { data: ownershipLocks } = useQuery({ queryKey: qk.locks(run.id), queryFn: () => listOwnershipLocks(run.id), enabled: isExpanded, refetchInterval: isExpanded ? fallback : false, staleTime: 30000 });
-  const { data: mergeQueue } = useQuery({ queryKey: qk.mergeQueue(run.id), queryFn: () => listMergeQueue(run.id), enabled: isExpanded, refetchInterval: isExpanded ? fallback : false, staleTime: 30000 });
   const { data: signals } = useQuery({ queryKey: qk.signals(run.id), queryFn: () => listSignals(run.id), enabled: isExpanded, refetchInterval: isExpanded ? fallback : false, staleTime: 30000 });
   const { data: runMessages } = useQuery({ queryKey: qk.runMessages(run.id), queryFn: () => listRunMessages(run.id), enabled: isExpanded, refetchInterval: isExpanded ? fallback : false, staleTime: 30000 });
 
@@ -249,9 +213,9 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmAbort, setConfirmAbort] = useState(false);
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [reportData, setReportData] = useState<RunReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [eventCatFilter, setEventCatFilter] = useState<string | null>(null);
   const [eventsShowAll, setEventsShowAll] = useState(false);
   const [animReady, setAnimReady] = useState(false);
@@ -325,42 +289,22 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
     try { await resumeRun(run.id); } catch (e) { setActionError(e instanceof Error ? e.message : String(e)); } finally { setActionLoading(null); }
   };
 
-  const handleReport = async () => {
-    if (reportData) { setExpandedSection(expandedSection === "report" ? null : "report"); return; }
+  // Auto-fetch report when the Report tab is opened for the first time
+  useEffect(() => {
+    if (runTab !== "report" || reportData || reportLoading) return;
     setReportLoading(true);
-    try { const data = await getRunReport(run.id); setReportData(data); setExpandedSection("report"); } catch (e) { setActionError(e instanceof Error ? e.message : String(e)); } finally { setReportLoading(false); }
-  };
-
-  const toggleSection = (name: string) => setExpandedSection(expandedSection === name ? null : name);
+    setReportError(null);
+    getRunReport(run.id)
+      .then(data => setReportData(data))
+      .catch(e => setReportError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setReportLoading(false));
+  }, [runTab, run.id, reportData, reportLoading]);
 
   const handleAbort = async () => {
     if (!confirmAbort) { setConfirmAbort(true); setTimeout(() => setConfirmAbort(false), 4000); return; }
     setConfirmAbort(false); setActionLoading("abort"); setActionError(null);
     try { await abortRun(run.id); } catch (e) { setActionError(e instanceof Error ? e.message : String(e)); } finally { setActionLoading(null); }
   };
-
-  // ── Session grouping ───────────────────────────────────────────────────
-
-  const groupedSessions = (() => {
-    if (!sessions || !planSteps) return sessions ? [sessions] : [];
-    const groups: SessionRecord[][] = [];
-    const sessionWaveMap = new Map<string, number>();
-    for (const step of planSteps) { if (step.session_id) sessionWaveMap.set(step.session_id, step.wave); }
-    const byWave = new Map<number, SessionRecord[]>();
-    let maxWave = 0;
-    for (const s of sessions) {
-      const wave = sessionWaveMap.get(s.id) ?? maxWave++;
-      const existing = byWave.get(wave) ?? [];
-      existing.push(s);
-      byWave.set(wave, existing);
-    }
-    const sortedWaves = Array.from(byWave.keys()).sort((a, b) => a - b);
-    for (const w of sortedWaves) groups.push(byWave.get(w)!);
-    return groups.length > 0 ? groups : sessions ? [sessions] : [];
-  })();
-
-  const stepForSession = (sessionId: string): PlanStep | undefined =>
-    planSteps?.find(s => s.session_id === sessionId);
 
   // ── Container styling ──────────────────────────────────────────────────
 
@@ -395,11 +339,10 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
 
   // ── Tab definitions ────────────────────────────────────────────────────
 
-  const tabs: { id: "activity" | "agents" | "tasks" | "logs"; label: string; count?: number }[] = [
+  const tabs: { id: "activity" | "logs" | "report"; label: string; count?: number }[] = [
     { id: "activity", label: "Activity" },
-    { id: "agents", label: "Agents", count: sessions?.length },
-    { id: "tasks", label: "Tasks", count: subtasks?.length ?? 0 },
     { id: "logs", label: "Logs", count: sessions?.length },
+    { id: "report", label: "Report" },
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -546,12 +489,64 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
             <code style={{ fontFamily: C.mono, fontSize: 11.5, color: P.textMuted, flex: 1 }}>{branch}</code>
             {run.publish_error && <span style={{ fontSize: 11, color: P.red }}>{run.publish_error}</span>}
             <IconBtn
-              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(run.final_commit_sha ?? branch).catch(() => {}); }}
+              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(run.final_commit_sha ?? branch).catch(() => { }); }}
               tooltip="Copy hash"
             >
               <Copy size={13} />
             </IconBtn>
           </div>
+
+          {/* ── Agent chain ── */}
+          {sessions && sessions.length > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 0,
+              padding: "8px 16px 4px",
+              flexWrap: "wrap",
+              opacity: animReady ? 1 : 0,
+              transition: `opacity 0.3s ${EASE} 0.05s`,
+            }}>
+              {sessions.map((session, i) => {
+                const agentIcon = AGENT_ICONS[session.agent_type.toLowerCase()];
+                const color = agentIcon?.color ?? P.blue;
+                const bg = agentIcon?.bg ?? BADGE_COLORS.blue.bg;
+                const sc = statusColor(session.state);
+                const isRunning = session.state === "running";
+                return (
+                  <div key={session.id} style={{ display: "flex", alignItems: "center" }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 5,
+                      padding: "3px 8px 3px 6px",
+                      borderRadius: 5,
+                      background: bg,
+                    }}>
+                      <div style={{
+                        width: 14, height: 14, borderRadius: 3,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color,
+                      }}>
+                        {agentIcon ? agentIcon.icon(10) : <Zap size={10} />}
+                      </div>
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 600, color,
+                        textTransform: "capitalize", whiteSpace: "nowrap",
+                      }}>
+                        {formatRunAgentLabel(session.agent_type, run.pipeline)}
+                      </span>
+                      <div style={{
+                        width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
+                        background: isRunning ? color : sc.text,
+                        opacity: isRunning ? 1 : 0.5,
+                        animation: isRunning ? "pulse 1.5s infinite" : undefined,
+                      }} />
+                    </div>
+                    {i < sessions.length - 1 && (
+                      <span style={{ fontSize: 9, color: P.textFaint, padding: "0 3px", opacity: 0.5 }}>→</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* ── Phase gates ── */}
           {visibleGateBlocks.length > 0 && (
@@ -623,208 +618,6 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
                     {gateHistoryBlocks.map(cp => <PhaseGateBlock key={`history-${cp.id}`} checkpoint={cp} runId={run.id} />)}
                   </div>
                 )}
-
-                {sessions && sessions.length > 0 && (
-                  <InlineLogsSection sessionLogs={sessionLogs} animReady={animReady} />
-                )}
-              </div>
-            )}
-
-            {/* ════ Agents tab ════ */}
-            {runTab === "agents" && (
-              <div style={{ flex: 1, padding: "16px 16px 12px" }}>
-                {groupedSessions.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {groupedSessions.map((group, gi) => (
-                      <div key={gi} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {group.map((session, si) => {
-                          const aKey = `${run.id}-${gi}-${si}`;
-                          const agentIcon = AGENT_ICONS[session.agent_type.toLowerCase()] ?? { icon: (s: number) => <Zap size={s} />, color: P.blue, bg: BADGE_COLORS.blue.bg, border: BADGE_COLORS.blue.border };
-                          return (
-                            <div key={session.id}>
-                              <div
-                                onClick={() => onToggleAgent(expandedAgentKey === aKey ? "" : aKey)}
-                                style={{
-                                  display: "flex", alignItems: "center", gap: 12,
-                                  padding: "12px 14px",
-                                  background: P.bgCard, border: `1px solid ${P.borderSubtle}`,
-                                  borderRadius: 10, cursor: "pointer",
-                                }}
-                              >
-                                <div style={{
-                                  width: 32, height: 32, borderRadius: 8,
-                                  background: agentIcon.bg, border: `1px solid ${agentIcon.border}`,
-                                  display: "flex", alignItems: "center", justifyContent: "center",
-                                  color: agentIcon.color,
-                                }}>
-                                  {agentIcon.icon(14)}
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 500, color: P.text }}>{session.agent_type}</div>
-                                  <div style={{ fontSize: 11.5, color: P.textFaint, fontFamily: C.mono }}>{session.id.slice(0, 12)}</div>
-                                </div>
-                                <Badge color="gray" small>{session.state}</Badge>
-                              </div>
-                              {expandedAgentKey === aKey && (
-                                <div style={{ marginTop: 4 }}>
-                                  <AgentDetail session={session} planStep={stepForSession(session.id)} isExpanded={true} onToggle={() => onToggleAgent("")} />
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* File Locks */}
-                {ownershipLocks && ownershipLocks.length > 0 && (
-                  <CollapsibleSection title="File Locks" count={ownershipLocks.length} isOpen={expandedSection === "locks"} onToggle={() => toggleSection("locks")}>
-                    {ownershipLocks.map(lock => (
-                      <div key={lock.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px" }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, color: P.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lock.path}</span>
-                        <span style={{ fontSize: 12, color: P.textFaint }}>{lock.owner_session_id.slice(0, 8)}</span>
-                      </div>
-                    ))}
-                  </CollapsibleSection>
-                )}
-
-                {/* Merge Queue */}
-                {mergeQueue && mergeQueue.length > 0 && (
-                  <CollapsibleSection title="Merge Queue" count={mergeQueue.length} isOpen={expandedSection === "merge"} onToggle={() => toggleSection("merge")}>
-                    {mergeQueue.map(mq => (
-                      <div key={mq.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px" }}>
-                        <StepStatusDot status={mq.status} />
-                        <span style={{ fontSize: 13, color: P.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mq.branch_name}</span>
-                        <span style={{
-                          fontSize: 11, padding: "1px 6px", borderRadius: 4, fontWeight: 500,
-                          background: mq.status === "merged" ? BADGE_COLORS.green.bg : mq.status === "failed" ? BADGE_COLORS.red.bg : BADGE_COLORS.amber.bg,
-                          color: mq.status === "merged" ? P.accent : mq.status === "failed" ? P.red : "#f59e0b",
-                        }}>{mq.status}</span>
-                      </div>
-                    ))}
-                  </CollapsibleSection>
-                )}
-              </div>
-            )}
-
-            {/* ════ Tasks tab ════ */}
-            {runTab === "tasks" && (
-              <div style={{ padding: "12px 16px" }}>
-                {/* Plan Steps */}
-                {planSteps && planSteps.length > 0 && (
-                  <div style={{
-                    padding: 14, borderRadius: 10, marginBottom: 12,
-                    background: P.bgSurface, border: `1px solid ${P.borderSubtle}`,
-                  }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
-                      paddingBottom: 8, borderBottom: `1px solid ${P.borderSubtle}`,
-                    }}>
-                      <Badge color="blue" small>Plan</Badge>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: P.textMuted }}>Steps</span>
-                      <span style={{ fontSize: 10, fontFamily: C.mono, color: P.textFaint, marginLeft: "auto" }}>
-                        {planSteps.filter(s => s.status === "completed" || s.status === "done").length}/{planSteps.length}
-                      </span>
-                    </div>
-                    {(() => {
-                      const waveMap = new Map<number, PlanStep[]>();
-                      for (const s of planSteps) { const arr = waveMap.get(s.wave) ?? []; arr.push(s); waveMap.set(s.wave, arr); }
-                      const waves = Array.from(waveMap.keys()).sort((a, b) => a - b);
-                      return waves.map(w => (
-                        <div key={w} style={{ marginBottom: 4 }}>
-                          {waves.length > 1 && (
-                            <div style={{ fontSize: 10, color: P.textFaint, fontWeight: 600, letterSpacing: "0.05em", marginBottom: 4, paddingLeft: 4 }}>
-                              Wave {w + 1}{waveMap.get(w)!.length > 1 ? " · parallel" : ""}
-                            </div>
-                          )}
-                          {waveMap.get(w)!.map(step => {
-                            const stepDone = step.status === "completed" || step.status === "done";
-                            return (
-                              <CheckItem key={step.id} label={step.title} passed={stepDone} failed={step.status === "failed"}>
-                                <Badge color={agentBadgeColor(step.agent_type)} small>{step.agent_type}</Badge>
-                              </CheckItem>
-                            );
-                          })}
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                )}
-
-                {/* Subtasks */}
-                {subtasks && subtasks.length > 0 && (
-                  <div style={{
-                    padding: 14, borderRadius: 10,
-                    background: P.bgSurface, border: `1px solid ${P.borderSubtle}`,
-                  }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
-                      paddingBottom: 8, borderBottom: `1px solid ${P.borderSubtle}`,
-                    }}>
-                      <Badge color="purple" small>Subtasks</Badge>
-                      <span style={{ fontSize: 10, fontFamily: C.mono, color: P.textFaint, marginLeft: "auto" }}>
-                        {subtasks.filter(s => s.status === "completed" || s.status === "done").length}/{subtasks.length}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {subtasks.map(st => {
-                        const stDone = st.status === "completed" || st.status === "done";
-                        return (
-                          <div key={st.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: P.textMuted, padding: "4px 0" }}>
-                            <div style={{
-                              width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 2,
-                              background: stDone ? P.accentBg : st.status === "failed" ? "rgba(248,113,113,0.1)" : "rgba(255,255,255,0.04)",
-                              border: `1px solid ${stDone ? P.accentBorder : st.status === "failed" ? "rgba(248,113,113,0.3)" : "rgba(255,255,255,0.08)"}`,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              color: stDone ? P.accent : st.status === "failed" ? P.red : P.textFaint,
-                            }}>
-                              {stDone && <Check size={9} />}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ color: P.text, fontWeight: 500, fontSize: 13 }}>{st.title}</span>
-                              {st.description && (
-                                <p style={{ fontSize: 12, color: P.textMuted, marginTop: 2, lineHeight: 1.5, margin: "2px 0 0" }}>
-                                  {st.description.length > 140 ? st.description.slice(0, 140) + "…" : st.description}
-                                </p>
-                              )}
-                              {st.files_hint.length > 0 && (
-                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
-                                  {st.files_hint.slice(0, 4).map(f => (
-                                    <code key={f} style={{ fontSize: 10, color: "#a78bfa", fontFamily: C.mono, background: BADGE_COLORS.purple.bg, padding: "1px 5px", borderRadius: 3 }}>
-                                      {f.split("/").pop()}
-                                    </code>
-                                  ))}
-                                  {st.files_hint.length > 4 && <span style={{ fontSize: 10, color: P.textFaint }}>+{st.files_hint.length - 4}</span>}
-                                </div>
-                              )}
-                            </div>
-                            {st.assigned_agent && <Badge color={agentBadgeColor(st.assigned_agent)} small>{st.assigned_agent}</Badge>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Empty state */}
-                {(!planSteps || planSteps.length === 0) && (!subtasks || subtasks.length === 0) && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 0" }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{
-                        width: 40, height: 40, borderRadius: 10, margin: "0 auto 12px",
-                        background: "rgba(255,255,255,0.03)", border: `1px dashed ${P.border}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: P.textFaint,
-                      }}>
-                        <FileText size={18} />
-                      </div>
-                      <p style={{ fontSize: 13, color: P.textFaint, margin: 0 }}>No tasks in this run</p>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -832,25 +625,29 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
             {runTab === "logs" && (
               <SessionLogsTab sessionLogs={sessionLogs} isActive={isActive} pipeline={run.pipeline} />
             )}
-          </div>
 
-          {/* ── Report Panel ── */}
-          {expandedSection === "report" && reportData && (
-            <div style={{ borderRadius: 10, border: `1px solid ${P.borderSubtle}`, margin: "0 16px 12px", overflow: "hidden" }}>
-              <div style={{
-                padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: `1px solid ${P.borderSubtle}`, background: P.bgSurface,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Badge color="blue" small>Report</Badge>
-                  <Badge color={badge.color} small>{badge.label}</Badge>
-                </div>
-                <IconBtn onClick={(e) => { e.stopPropagation(); setExpandedSection(null); }} tooltip="Close">
-                  <span style={{ fontSize: 14, lineHeight: 1 }}>×</span>
-                </IconBtn>
-              </div>
-
+            {/* ════ Report tab ════ */}
+            {runTab === "report" && (
               <div style={{ maxHeight: 480, overflowY: "auto" }}>
+                {reportLoading && (
+                  <div style={{ padding: "32px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: P.textFaint }}>
+                    <span className="spinner" style={{ width: 14, height: 14, borderWidth: 1.5, display: "inline-block" }} />
+                    <span style={{ fontSize: 12 }}>Loading report…</span>
+                  </div>
+                )}
+                {reportError && !reportLoading && (
+                  <div style={{ padding: "24px 16px", textAlign: "center" }}>
+                    <div style={{ fontSize: 12, color: P.red, marginBottom: 8 }}>{reportError}</div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setReportError(null); }}
+                      style={{ fontSize: 11, color: P.textMuted, background: "transparent", border: `1px solid ${P.borderSubtle}`, borderRadius: 5, padding: "4px 12px", cursor: "pointer" }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {reportData && !reportLoading && (
+                  <>
                 {/* Overview */}
                 <div style={{ padding: "10px 12px", borderBottom: `1px solid ${P.borderSubtle}` }}>
                   <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: P.textFaint, marginBottom: 8 }}>Overview</div>
@@ -1008,9 +805,11 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
                     </div>
                   </div>
                 )}
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* ── FOOTER ACTIONS ── */}
           <div style={{
@@ -1034,7 +833,7 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
               onClick={async (e) => {
                 e.stopPropagation();
                 setActionLoading("fork"); setActionError(null);
-                try { const path = await forkRunWorktree(run.id); navigator.clipboard.writeText(path).catch(() => {}); }
+                try { const path = await forkRunWorktree(run.id); navigator.clipboard.writeText(path).catch(() => { }); }
                 catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
                 finally { setActionLoading(null); }
               }}
@@ -1047,17 +846,6 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
                 opacity: actionLoading === "fork" ? 0.5 : 1,
               }}>
               <ForkIcon size={13} /> {actionLoading === "fork" ? "Forking…" : "Fork"}
-            </button>
-            <button className="action-btn" onClick={(e) => { e.stopPropagation(); handleReport(); }}
-              disabled={reportLoading}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                fontWeight: 500, color: P.textMuted, fontSize: 12,
-                background: "transparent", border: `1px solid ${P.borderSubtle}`,
-                borderRadius: 7, padding: "7px 12px", cursor: "pointer",
-                opacity: reportLoading ? 0.5 : 1,
-              }}>
-              <FileText size={13} /> {reportLoading ? "Loading…" : "Report"}
             </button>
 
             <div style={{ flex: 1 }} />
@@ -1154,94 +942,6 @@ export const RunCard = memo(function RunCard({ run, number, isExpanded, onToggle
   );
 });
 
-// ── InlineLogsSection ────────────────────────────────────────────────────────
-
-function InlineLogsSection({ sessionLogs, animReady }: { sessionLogs: { session: SessionRecord; entries: (LogEntry & { agentType?: string })[] }[]; animReady: boolean }) {
-  const [expanded, setExpanded] = useState(true);
-  if (sessionLogs.length === 0) return null;
-
-  const agentTypes = sessionLogs.map(sl => sl.session.agent_type);
-  const label = agentTypes.length <= 2 ? agentTypes.join(" + ") : `${agentTypes.length} agents`;
-  const firstSession = sessionLogs[0]?.session;
-  const lastSession = sessionLogs[sessionLogs.length - 1]?.session;
-  const allDone = sessionLogs.every(sl => sl.session.state === "done" || sl.session.state === "completed");
-
-  return (
-    <div style={{
-      margin: "8px 16px 0",
-      borderTop: `1px solid ${P.borderSubtle}`,
-      paddingTop: 16,
-      opacity: animReady ? 1 : 0,
-      transition: "opacity 0.4s 0.7s",
-    }}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          display: "flex", alignItems: "center", gap: 8, width: "100%",
-          background: "none", border: "none", cursor: "pointer",
-          padding: "4px 0", marginBottom: expanded ? 10 : 0,
-        }}
-      >
-        <span style={{ color: P.textFaint, display: "inline-flex" }}>
-          {expanded ? <ChevronDown size={14} /> : <ChevronR size={14} />}
-        </span>
-        <span style={{ color: P.textFaint, display: "flex", alignItems: "center" }}><Terminal size={13} /></span>
-        <span style={{ fontSize: 13, fontWeight: 500, color: P.text }}>Logs</span>
-        <Badge color="gray" small>{label}</Badge>
-        <span style={{
-          marginLeft: "auto", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em",
-          color: allDone ? P.accent : P.blue,
-        }}>
-          {allDone ? "COMPLETED" : "RUNNING"}
-        </span>
-      </button>
-
-      {expanded && (
-        <div style={{
-          background: P.bgSurface,
-          border: `1px solid ${P.borderSubtle}`,
-          borderRadius: 8,
-          padding: "8px 14px",
-          animation: "fadeIn 0.2s ease",
-        }}>
-          {firstSession && (
-            <div style={{
-              fontSize: 11, color: P.textFaint, fontFamily: C.mono, padding: "4px 0",
-              borderBottom: `1px solid ${P.borderSubtle}`, marginBottom: 4,
-            }}>
-              {firstSession.id.slice(0, 12)}
-              {firstSession.provider_session_id && ` · provider ${firstSession.provider_session_id.slice(0, 12)}`}
-              {firstSession.started_at && ` · ${new Date(firstSession.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
-              {lastSession?.ended_at && ` → ${new Date(lastSession.ended_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
-            </div>
-          )}
-
-          {sessionLogs.flatMap(sl => sl.entries).slice(0, 20).map((entry, i) => {
-            const levelColor: Record<string, string> = {
-              system: P.blue, assistant: P.accent, result: P.accent,
-              tool_use: "#a78bfa", tool_result: P.textMuted, raw: P.textFaint,
-            };
-            const level = entry.role === "system" ? "INIT" : entry.role === "result" ? "RUN" : entry.role === "tool_use" ? "TOOL" : entry.role === "assistant" ? "RUN" : "OUT";
-            const color = levelColor[entry.role] ?? P.textFaint;
-            const content = sanitizeLogContent(entry.content ?? "");
-            if (!content && !entry.tool_name) return null;
-            return (
-              <div key={i} style={{ display: "flex", gap: 10, padding: "5px 0", alignItems: "flex-start" }}>
-                <span style={{ fontFamily: C.mono, fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", color, minWidth: 32, paddingTop: 2 }}>
-                  {level}
-                </span>
-                <span style={{ fontFamily: C.mono, fontSize: 12, color: P.textMuted, wordBreak: "break-all", flex: 1, minWidth: 0 }}>
-                  {entry.tool_name ? `${entry.tool_name}${content ? ` · ${content.slice(0, 80)}` : ""}` : content.slice(0, 120)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── RunThread ────────────────────────────────────────────────────────────────
 
 function RunThread({ runId, sessions, dbMessages, runState, permissionMode, liveEntries, animReady }: {
@@ -1301,44 +1001,6 @@ function RunThread({ runId, sessions, dbMessages, runState, permissionMode, live
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Activity header */}
-      <div style={{
-        padding: "14px 16px 10px", display: "flex", alignItems: "flex-start", gap: 8,
-      }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: P.text, marginBottom: 2 }}>Activity</div>
-          <div style={{ fontSize: 12, color: P.textFaint }}>Live thread and gate history for this run</div>
-        </div>
-        <span style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: "0.05em",
-          padding: "3px 10px", borderRadius: 4,
-          color: isActive ? P.blue : runState === "completed" ? P.accent : runState === "failed" ? P.red : P.textFaint,
-          background: isActive ? BADGE_COLORS.blue.bg : runState === "completed" ? BADGE_COLORS.green.bg : runState === "failed" ? BADGE_COLORS.red.bg : "rgba(255,255,255,0.04)",
-          border: `1px solid ${isActive ? BADGE_COLORS.blue.border : runState === "completed" ? BADGE_COLORS.green.border : runState === "failed" ? BADGE_COLORS.red.border : "rgba(255,255,255,0.08)"}`,
-        }}>
-          {isActive ? "RUNNING" : runState === "completed" ? "COMPLETED" : runState === "failed" ? "FAILED" : runState.toUpperCase()}
-        </span>
-      </div>
-
-      {/* Status bar */}
-      <div style={{
-        padding: "4px 16px 8px", display: "flex", alignItems: "center", gap: 8,
-        borderBottom: `1px solid ${P.borderSubtle}`,
-      }}>
-        <span style={{
-          width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-          background: isActive ? P.accent : P.textFaint,
-        }} />
-        <span style={{ fontSize: 11, color: P.textMuted, fontWeight: 500 }}>
-          {isActive ? "Live" : runState}
-        </span>
-        <span style={{ marginLeft: "auto" }}>
-          <Badge color="gray" small>
-            {mode === "human_gate" ? "HUMAN" : mode === "autonomous_gate" ? "GATEKEEPER" : "AUTO"}
-          </Badge>
-        </span>
-      </div>
-
       {/* Message stream */}
       <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto", maxHeight: 400 }}>
         {!hasContent && (
@@ -1357,37 +1019,29 @@ function RunThread({ runId, sessions, dbMessages, runState, permissionMode, live
 
         {/* Fallback: DB messages */}
         {entries.length === 0 && dbMessages && dbMessages.length > 0 && (
-          <div style={{ paddingTop: 4 }}>
+          <div style={{ paddingTop: 4, fontFamily: C.mono }}>
             {dbMessages.map(msg => {
-              const isUser = msg.role === "user";
-              const isSystem = msg.role === "system";
-              if (isSystem) {
+              if (msg.role === "system") {
                 return (
-                  <div key={msg.id} style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div key={msg.id} style={{ padding: "5px 12px", display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }} />
-                    <span style={{ fontSize: 10, color: P.textFaint, fontStyle: "italic", flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, color: P.textFaint, fontStyle: "italic", flexShrink: 0, fontFamily: C.mono }}>
                       {msg.content.length > 80 ? msg.content.slice(0, 80) + "\u2026" : msg.content}
                     </span>
                     <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }} />
                   </div>
                 );
               }
-              const badgeC = isUser ? "green" : "blue";
-              const borderC = isUser ? BADGE_COLORS.green.text : BADGE_COLORS.blue.text;
+              const isUser = msg.role === "user";
+              const prefixColor = isUser ? P.accent : P.blue;
+              const prefix = isUser ? "YOU " : "OUT ";
               return (
-                <div key={msg.id} style={{
-                  padding: "12px 14px", margin: "8px 12px", borderRadius: 8,
-                  background: P.bgSurface,
-                  border: `1px solid ${P.borderSubtle}`,
-                  borderLeft: `3px solid ${borderC}`,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <Badge color={badgeC} small>{msg.role}</Badge>
-                    <span style={{ fontSize: 10, color: P.textFaint }}>{relativeTime(msg.created_at)}</span>
-                  </div>
-                  <p style={{ fontSize: 13, color: P.textMuted, lineHeight: 1.55, paddingLeft: 2, margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                <div key={msg.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "4px 12px", fontSize: 12, lineHeight: 1.55 }}>
+                  <span style={{ color: prefixColor, fontWeight: 700, flexShrink: 0, width: 40 }}>{prefix}</span>
+                  <span style={{ color: P.textMuted, flex: 1, minWidth: 0, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                     {msg.content}
-                  </p>
+                    <span style={{ color: P.textFaint, marginLeft: 10, fontSize: 10 }}>{relativeTime(msg.created_at)}</span>
+                  </span>
                 </div>
               );
             })}
@@ -1502,13 +1156,13 @@ function SessionLogsTab({
             </div>
 
             {isSessionExpanded && (
-              <div style={{ padding: "12px" }}>
+              <div style={{ padding: "8px 14px 10px" }}>
                 {entries.length > 0 ? (
                   entries.map((entry, index) => (
                     <RichLogEntryRow key={`${session.id}-${index}`} entry={entry} agentType={formatRunAgentLabel(session.agent_type, pipeline)} />
                   ))
                 ) : (
-                  <div style={{ fontSize: 12, color: P.textFaint }}>
+                  <div style={{ fontSize: 12, color: P.textFaint, fontFamily: C.mono, padding: "4px 0" }}>
                     {isActive ? "Waiting for session log events..." : "No parsed session log entries."}
                   </div>
                 )}
@@ -1526,60 +1180,62 @@ function SessionLogsTab({
 function RichLogEntryRow({ entry, agentType }: { entry: LogEntry; agentType?: string }) {
   const sanitizedContent = sanitizeLogContent(entry.content ?? "");
   const metadata = parseMetadataJson(entry.metadata_json);
-  const label = entry.subtype ?? entry.event_type ?? entry.role;
-  const badgeColorName =
-    entry.role === "system" ? "amber" :
-      entry.role === "assistant" ? "blue" :
-        entry.role === "tool_use" ? "purple" :
-          entry.role === "tool_result" ? "gray" :
-            entry.role === "result" ? "green" :
-              "gray";
+
+  const PREFIX: Record<string, { text: string; color: string }> = {
+    system:      { text: "SYS ", color: P.textFaint },
+    assistant:   { text: "MSG ", color: P.blue },
+    tool_use:    { text: "TOOL", color: "#a78bfa" },
+    tool_result: { text: "RSLT", color: P.textFaint },
+    result:      { text: "DONE", color: entry.is_error ? P.red : P.accent },
+  };
+  const { text: pfx, color: pfxColor } = PREFIX[entry.role ?? ""] ?? { text: "LOG ", color: P.textFaint };
+  const displayPfx = entry.is_error ? "ERR!" : pfx;
+  const displayColor = entry.is_error ? P.red : pfxColor;
 
   return (
-    <div className="activity-row" style={{
-      padding: "12px 12px", borderBottom: `1px solid ${P.borderSubtle}`, borderRadius: 6,
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 10,
+      padding: "3px 0", fontFamily: C.mono, fontSize: 12, lineHeight: 1.55,
+      borderBottom: `1px solid rgba(255,255,255,0.03)`,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: sanitizedContent || entry.tool_name || entry.detail ? 6 : 0 }}>
-        <Badge color={badgeColorName} small>{label}</Badge>
-        {entry.line_no != null && <span style={{ fontSize: 10, color: P.textFaint, fontFamily: C.mono }}>line {entry.line_no}</span>}
-        {agentType && <span style={{ fontSize: 12, color: P.textFaint, fontWeight: 500 }}>{agentType}</span>}
-        {entry.cost_usd != null && <span style={{ fontSize: 10, color: P.textFaint, fontFamily: C.mono, marginLeft: "auto" }}>${entry.cost_usd.toFixed(4)}</span>}
-        {entry.is_error && (
-          <span style={{
-            fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
-            padding: "2px 8px", borderRadius: 4, marginLeft: entry.cost_usd != null ? 0 : "auto",
-            background: BADGE_COLORS.red.bg, border: `1px solid ${BADGE_COLORS.red.border}`, color: P.red,
-          }}>ERROR</span>
+      <span style={{ color: displayColor, fontWeight: 700, flexShrink: 0, width: 38, letterSpacing: "0.02em" }}>
+        {displayPfx}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {entry.tool_name && (
+          <span style={{ color: "#a78bfa", marginRight: 8 }}>{entry.tool_name}</span>
+        )}
+        {sanitizedContent && (
+          <span style={{ color: entry.is_error ? P.red : P.textMuted, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+            {sanitizedContent.length > 240 ? sanitizedContent.slice(0, 240) + "\u2026" : sanitizedContent}
+          </span>
+        )}
+        {!sanitizedContent && entry.detail && (
+          <span style={{ color: P.textFaint, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+            {entry.detail.slice(0, 240)}
+          </span>
+        )}
+        {(entry.cost_usd != null || entry.line_no != null || agentType) && (
+          <span style={{ color: P.textFaint, marginLeft: 10, fontSize: 10 }}>
+            {agentType && <span>{agentType}</span>}
+            {entry.line_no != null && <span style={{ marginLeft: agentType ? 6 : 0 }}>:{entry.line_no}</span>}
+            {entry.cost_usd != null && <span style={{ marginLeft: 6 }}>${entry.cost_usd.toFixed(4)}</span>}
+          </span>
+        )}
+        {metadata && Object.keys(metadata).length > 0 && (
+          <details style={{ marginTop: 4 }}>
+            <summary style={{ cursor: "pointer", fontSize: 10, color: P.textFaint }}>details</summary>
+            <pre style={{
+              margin: "4px 0 0", padding: "8px 10px", borderRadius: 4,
+              background: "rgba(255,255,255,0.03)", border: `1px solid ${P.borderSubtle}`,
+              fontSize: 10, color: P.textMuted, whiteSpace: "pre-wrap", wordBreak: "break-word",
+              fontFamily: C.mono, lineHeight: 1.5,
+            }}>
+              {JSON.stringify(metadata, null, 2)}
+            </pre>
+          </details>
         )}
       </div>
-      {entry.tool_name && (
-        <div style={{ fontSize: 11, color: P.textMuted, marginBottom: 4, fontFamily: C.mono }}>
-          <code style={{ fontSize: 12, color: "#a78bfa", background: BADGE_COLORS.purple.bg, padding: "1px 5px", borderRadius: 3 }}>{entry.tool_name}</code>
-        </div>
-      )}
-      {sanitizedContent && (
-        <p style={{ fontSize: 13, color: P.textMuted, lineHeight: 1.55, paddingLeft: 2, margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-          {sanitizedContent}
-        </p>
-      )}
-      {entry.detail && (
-        <p style={{ margin: "4px 0 0", paddingLeft: 2, fontSize: 12, color: P.textFaint, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-          {entry.detail}
-        </p>
-      )}
-      {metadata && Object.keys(metadata).length > 0 && (
-        <details style={{ marginTop: 8 }}>
-          <summary style={{ cursor: "pointer", fontSize: 11, color: P.textFaint, fontFamily: C.mono }}>details</summary>
-          <pre style={{
-            margin: "8px 0 0", padding: "10px 12px", borderRadius: 6,
-            background: "rgba(255,255,255,0.03)", border: `1px solid ${P.borderSubtle}`,
-            fontSize: 11, color: P.textMuted, whiteSpace: "pre-wrap", wordBreak: "break-word",
-            fontFamily: C.mono, lineHeight: 1.5,
-          }}>
-            {JSON.stringify(metadata, null, 2)}
-          </pre>
-        </details>
-      )}
     </div>
   );
 }
@@ -1590,43 +1246,38 @@ function LogEntryRow({ entry, agentType, staggerDelay, animReady }: { entry: Log
   const sanitizedContent = sanitizeLogContent(entry.content ?? "");
   const stagger: React.CSSProperties = staggerDelay != null ? {
     opacity: animReady ? 1 : 0,
-    transform: animReady ? "translateY(0)" : "translateY(6px)",
-    transition: `all 0.4s ${EASE} ${staggerDelay}s`,
+    transform: animReady ? "translateY(0)" : "translateY(4px)",
+    transition: `all 0.35s ${EASE} ${staggerDelay}s`,
   } : {};
 
   // System messages as subtle dividers
   if (entry.role === "system") {
     return (
-      <div style={{ padding: "6px 0", display: "flex", alignItems: "center", gap: 10, ...stagger }}>
+      <div style={{ padding: "5px 12px", display: "flex", alignItems: "center", gap: 10, ...stagger }}>
         <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }} />
-        <span style={{ fontSize: 10, color: P.textFaint, fontStyle: "italic", flexShrink: 0 }}>
-          {entry.content.length > 100 ? entry.content.slice(0, 100) + "\u2026" : entry.content}
+        <span style={{ fontSize: 10, color: P.textFaint, fontStyle: "italic", flexShrink: 0, fontFamily: C.mono }}>
+          {entry.content.length > 80 ? entry.content.slice(0, 80) + "\u2026" : entry.content}
         </span>
         <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }} />
       </div>
     );
   }
 
-  const cardStyle = (borderColor: string): React.CSSProperties => ({
-    padding: "12px 14px", margin: "8px 12px", borderRadius: 8,
-    background: P.bgSurface,
-    border: `1px solid ${P.borderSubtle}`,
-    borderLeft: `3px solid ${borderColor}`,
+  const row: React.CSSProperties = {
+    display: "flex", alignItems: "flex-start", gap: 10,
+    padding: "4px 12px", fontFamily: C.mono, fontSize: 12, lineHeight: 1.55,
     ...stagger,
-  });
+  };
 
   if (entry.role === "tool_use") {
+    const preview = sanitizedContent ? (sanitizedContent.length > 140 ? sanitizedContent.slice(0, 140) + "\u2026" : sanitizedContent) : "";
     return (
-      <div style={cardStyle("#a78bfa")}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: sanitizedContent ? 6 : 0 }}>
-          <Badge color="purple" small>tool</Badge>
-          <span style={{ fontSize: 12, color: P.textFaint, fontWeight: 500, fontFamily: C.mono }}>{entry.tool_name ?? "tool"}</span>
-        </div>
-        {sanitizedContent && (
-          <p style={{ fontSize: 13, color: P.textMuted, lineHeight: 1.55, paddingLeft: 2, margin: 0 }}>
-            {sanitizedContent.length > 200 ? sanitizedContent.slice(0, 200) + "\u2026" : sanitizedContent}
-          </p>
-        )}
+      <div style={row}>
+        <span style={{ color: "#a78bfa", fontWeight: 700, flexShrink: 0, width: 40 }}>TOOL</span>
+        <span style={{ color: P.textMuted, flex: 1, minWidth: 0 }}>
+          <span style={{ color: "#a78bfa" }}>{entry.tool_name ?? "tool"}</span>
+          {preview && <span style={{ color: P.textFaint }}>{" \u00b7 "}{preview}</span>}
+        </span>
       </div>
     );
   }
@@ -1634,14 +1285,11 @@ function LogEntryRow({ entry, agentType, staggerDelay, animReady }: { entry: Log
   if (entry.role === "tool_result") {
     if (!sanitizedContent) return null;
     return (
-      <div style={cardStyle(P.textFaint)}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <Badge color="gray" small>result</Badge>
-          {entry.tool_name && <span style={{ fontSize: 12, color: P.textFaint, fontWeight: 500, fontFamily: C.mono }}>{entry.tool_name}</span>}
-        </div>
-        <p style={{ fontSize: 13, color: P.textMuted, lineHeight: 1.55, paddingLeft: 2, margin: 0 }}>
-          {sanitizedContent.length > 200 ? sanitizedContent.slice(0, 200) + "\u2026" : sanitizedContent}
-        </p>
+      <div style={row}>
+        <span style={{ color: P.textFaint, fontWeight: 700, flexShrink: 0, width: 40 }}>RSLT</span>
+        <span style={{ color: P.textFaint, flex: 1, minWidth: 0, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+          {sanitizedContent.length > 160 ? sanitizedContent.slice(0, 160) + "\u2026" : sanitizedContent}
+        </span>
       </div>
     );
   }
@@ -1649,14 +1297,14 @@ function LogEntryRow({ entry, agentType, staggerDelay, animReady }: { entry: Log
   if (entry.role === "result") {
     if (!sanitizedContent) return null;
     const isError = entry.is_error;
+    const color = isError ? P.red : P.accent;
     return (
-      <div style={cardStyle(isError ? P.red : P.accent)}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <Badge color={isError ? "amber" : "green"} small>{isError ? "Error" : "Result"}</Badge>
-          {agentType && <span style={{ fontSize: 12, color: P.textFaint, fontWeight: 500 }}>· {agentType}</span>}
-          {entry.cost_usd != null && <span style={{ fontSize: 10, color: P.textFaint, fontFamily: C.mono, marginLeft: "auto" }}>${entry.cost_usd.toFixed(4)}</span>}
-        </div>
-        <p style={{ fontSize: 13, color: P.textMuted, lineHeight: 1.55, paddingLeft: 2, margin: 0 }}>{sanitizedContent}</p>
+      <div style={row}>
+        <span style={{ color, fontWeight: 700, flexShrink: 0, width: 40 }}>{isError ? "ERR" : "DONE"}</span>
+        <span style={{ color, flex: 1, minWidth: 0, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+          {sanitizedContent}
+          {entry.cost_usd != null && <span style={{ color: P.textFaint, marginLeft: 10, fontSize: 10 }}>${entry.cost_usd.toFixed(4)}</span>}
+        </span>
       </div>
     );
   }
@@ -1664,23 +1312,17 @@ function LogEntryRow({ entry, agentType, staggerDelay, animReady }: { entry: Log
   // Assistant messages
   if (!sanitizedContent) return null;
   const badgeColor = agentBadgeColor(agentType);
-  const displayLabel = agentType ?? "Assistant";
-  const borderAccent = BADGE_COLORS[badgeColor]?.text ?? P.textFaint;
+  const prefixColor = BADGE_COLORS[badgeColor]?.text ?? P.textMuted;
+  const prefix = agentType ? agentType.slice(0, 4).toUpperCase() : "OUT ";
 
   return (
-    <div style={cardStyle(borderAccent)}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-        <Badge color={badgeColor} small>{displayLabel}</Badge>
-        {entry.is_error && (
-          <span style={{
-            marginLeft: "auto", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
-            padding: "2px 8px", borderRadius: 4,
-            background: BADGE_COLORS.red.bg, border: `1px solid ${BADGE_COLORS.red.border}`, color: P.red,
-          }}>ERROR</span>
-        )}
-        {entry.cost_usd != null && <span style={{ fontSize: 10, color: P.textFaint, fontFamily: C.mono, marginLeft: entry.is_error ? 0 : "auto" }}>${entry.cost_usd.toFixed(4)}</span>}
-      </div>
-      <p style={{ fontSize: 13, color: P.textMuted, lineHeight: 1.55, paddingLeft: 2, margin: 0 }}>{sanitizedContent}</p>
+    <div style={row}>
+      <span style={{ color: prefixColor, fontWeight: 700, flexShrink: 0, width: 40 }}>{prefix}</span>
+      <span style={{ color: P.textMuted, flex: 1, minWidth: 0, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+        {entry.is_error && <span style={{ color: P.red, marginRight: 8 }}>ERR!</span>}
+        {sanitizedContent}
+        {entry.cost_usd != null && <span style={{ color: P.textFaint, marginLeft: 10, fontSize: 10 }}>${entry.cost_usd.toFixed(4)}</span>}
+      </span>
     </div>
   );
 }
@@ -1764,87 +1406,52 @@ function parseMetadataJson(metadataJson?: string | null): Record<string, unknown
 
 // ── Helper components ────────────────────────────────────────────────────────
 
-const STEP_STATUS_COLORS: Record<string, string> = {
-  pending: P.textFaint, running: P.blue, completed: P.accent, done: P.accent,
-  failed: P.red, queued: "#f59e0b", merged: P.accent,
-};
-
-function StepStatusDot({ status }: { status: string }) {
-  const color = STEP_STATUS_COLORS[status] ?? P.textFaint;
-  return <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }} />;
-}
-
-function CollapsibleSection({ title, count, isOpen, onToggle, children }: {
-  title: string; count: number; isOpen: boolean; onToggle: () => void; children: React.ReactNode;
-}) {
-  return (
-    <div style={{ marginTop: 12 }}>
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        style={{ width: "100%", background: "transparent", border: "none", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "4px 0" }}
-      >
-        <span style={{ transform: isOpen ? "rotate(90deg)" : "", transition: "transform 0.15s", display: "inline-flex", color: P.textFaint }}>
-          <ChevronR size={10} />
-        </span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: P.textMuted }}>{title}</span>
-        <span style={{
-          fontSize: 10, fontWeight: 600, color: P.textFaint, fontFamily: C.mono,
-          background: "rgba(255,255,255,0.04)", padding: "1px 6px", borderRadius: 4,
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}>{count}</span>
-        <div style={{ flex: 1, height: 1, background: isOpen ? "transparent" : P.borderSubtle }} />
-      </button>
-      {isOpen && <div style={{ paddingBottom: 4 }}>{children}</div>}
-    </div>
-  );
-}
-
 // ── Event rendering helpers ──────────────────────────────────────────────────
 
 interface EvCatConfig { color: string; bg: string; label: string }
 
 const EV_CAT: Record<string, EvCatConfig> = {
-  run_created:               { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "run" },
-  run_completed:             { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "run" },
-  run_failed:                { color: P.red,       bg: BADGE_COLORS.red.bg,    label: "run" },
-  issue_linked:              { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "run" },
-  plan_generated:            { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "run" },
-  run_state_changed:         { color: P.textMuted, bg: "rgba(255,255,255,0.06)",label: "run" },
-  run_publish_state_changed: { color: P.blue,      bg: BADGE_COLORS.blue.bg,   label: "publish" },
-  session_spawned:           { color: "#a78bfa",   bg: BADGE_COLORS.purple.bg, label: "agent" },
-  session_state_changed:     { color: "#a78bfa",   bg: BADGE_COLORS.purple.bg, label: "agent" },
-  conv_branch_stale:         { color: "#f59e0b",   bg: BADGE_COLORS.amber.bg,  label: "git" },
-  pre_run_merge_clean:       { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "git" },
-  pre_run_merge_conflict:    { color: "#f59e0b",   bg: BADGE_COLORS.amber.bg,  label: "git" },
-  pre_run_conflict_resolved: { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "git" },
-  pre_run_conflict_failed:   { color: P.red,       bg: BADGE_COLORS.red.bg,    label: "git" },
-  conv_merged:               { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "git" },
-  conv_rebased:              { color: P.blue,      bg: BADGE_COLORS.blue.bg,   label: "git" },
-  pre_publish_pull_clean:    { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "git" },
-  pre_publish_pull_conflict: { color: "#f59e0b",   bg: BADGE_COLORS.amber.bg,  label: "git" },
-  pre_publish_pull_resolved: { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "git" },
-  pre_publish_pull_failed:   { color: P.red,       bg: BADGE_COLORS.red.bg,    label: "git" },
-  pre_publish_pull_skipped:  { color: P.textMuted, bg: "rgba(255,255,255,0.06)",label: "git" },
-  merge_queued:              { color: P.blue,      bg: BADGE_COLORS.blue.bg,   label: "merge" },
-  merge_started:             { color: P.blue,      bg: BADGE_COLORS.blue.bg,   label: "merge" },
-  merge_completed:           { color: P.accent,    bg: BADGE_COLORS.green.bg,  label: "merge" },
-  merge_failed:              { color: P.red,       bg: BADGE_COLORS.red.bg,    label: "merge" },
-  merge_conflict:            { color: "#f59e0b",   bg: BADGE_COLORS.amber.bg,  label: "merge" },
-  git_push_recovery_started:   { color: "#f59e0b", bg: BADGE_COLORS.amber.bg,  label: "git" },
-  git_push_recovery_completed: { color: P.accent,  bg: BADGE_COLORS.green.bg,  label: "git" },
-  git_push_recovery_failed:    { color: P.red,     bg: BADGE_COLORS.red.bg,    label: "git" },
-  watchdog_stalled:               { color: "#f59e0b", bg: BADGE_COLORS.amber.bg,  label: "watchdog" },
-  watchdog_zombie:                { color: "#f59e0b", bg: BADGE_COLORS.amber.bg,  label: "watchdog" },
-  watchdog_boot_timeout:          { color: P.red,     bg: BADGE_COLORS.red.bg,    label: "watchdog" },
-  watchdog_lifetime_exceeded:     { color: "#f59e0b", bg: BADGE_COLORS.amber.bg,  label: "watchdog" },
-  watchdog_run_lifetime_exceeded: { color: P.red,     bg: BADGE_COLORS.red.bg,    label: "watchdog" },
+  run_created: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "run" },
+  run_completed: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "run" },
+  run_failed: { color: P.red, bg: BADGE_COLORS.red.bg, label: "run" },
+  issue_linked: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "run" },
+  plan_generated: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "run" },
+  run_state_changed: { color: P.textMuted, bg: "rgba(255,255,255,0.06)", label: "run" },
+  run_publish_state_changed: { color: P.blue, bg: BADGE_COLORS.blue.bg, label: "publish" },
+  session_spawned: { color: "#a78bfa", bg: BADGE_COLORS.purple.bg, label: "agent" },
+  session_state_changed: { color: "#a78bfa", bg: BADGE_COLORS.purple.bg, label: "agent" },
+  conv_branch_stale: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "git" },
+  pre_run_merge_clean: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "git" },
+  pre_run_merge_conflict: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "git" },
+  pre_run_conflict_resolved: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "git" },
+  pre_run_conflict_failed: { color: P.red, bg: BADGE_COLORS.red.bg, label: "git" },
+  conv_merged: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "git" },
+  conv_rebased: { color: P.blue, bg: BADGE_COLORS.blue.bg, label: "git" },
+  pre_publish_pull_clean: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "git" },
+  pre_publish_pull_conflict: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "git" },
+  pre_publish_pull_resolved: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "git" },
+  pre_publish_pull_failed: { color: P.red, bg: BADGE_COLORS.red.bg, label: "git" },
+  pre_publish_pull_skipped: { color: P.textMuted, bg: "rgba(255,255,255,0.06)", label: "git" },
+  merge_queued: { color: P.blue, bg: BADGE_COLORS.blue.bg, label: "merge" },
+  merge_started: { color: P.blue, bg: BADGE_COLORS.blue.bg, label: "merge" },
+  merge_completed: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "merge" },
+  merge_failed: { color: P.red, bg: BADGE_COLORS.red.bg, label: "merge" },
+  merge_conflict: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "merge" },
+  git_push_recovery_started: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "git" },
+  git_push_recovery_completed: { color: P.accent, bg: BADGE_COLORS.green.bg, label: "git" },
+  git_push_recovery_failed: { color: P.red, bg: BADGE_COLORS.red.bg, label: "git" },
+  watchdog_stalled: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "watchdog" },
+  watchdog_zombie: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "watchdog" },
+  watchdog_boot_timeout: { color: P.red, bg: BADGE_COLORS.red.bg, label: "watchdog" },
+  watchdog_lifetime_exceeded: { color: "#f59e0b", bg: BADGE_COLORS.amber.bg, label: "watchdog" },
+  watchdog_run_lifetime_exceeded: { color: P.red, bg: BADGE_COLORS.red.bg, label: "watchdog" },
   checkpoint_saved: { color: P.textMuted, bg: "rgba(255,255,255,0.06)", label: "system" },
-  crash_recovery:   { color: P.red,       bg: BADGE_COLORS.red.bg,     label: "system" },
-  lock_acquired:    { color: P.textFaint, bg: "rgba(255,255,255,0.04)", label: "system" },
-  lock_released:    { color: P.textFaint, bg: "rgba(255,255,255,0.04)", label: "system" },
-  guard_violation:  { color: P.red,       bg: BADGE_COLORS.red.bg,     label: "security" },
-  signal_sent:      { color: "#a78bfa",   bg: BADGE_COLORS.purple.bg,  label: "signal" },
-  signal_broadcast: { color: "#a78bfa",   bg: BADGE_COLORS.purple.bg,  label: "signal" },
+  crash_recovery: { color: P.red, bg: BADGE_COLORS.red.bg, label: "system" },
+  lock_acquired: { color: P.textFaint, bg: "rgba(255,255,255,0.04)", label: "system" },
+  lock_released: { color: P.textFaint, bg: "rgba(255,255,255,0.04)", label: "system" },
+  guard_violation: { color: P.red, bg: BADGE_COLORS.red.bg, label: "security" },
+  signal_sent: { color: "#a78bfa", bg: BADGE_COLORS.purple.bg, label: "signal" },
+  signal_broadcast: { color: "#a78bfa", bg: BADGE_COLORS.purple.bg, label: "signal" },
 };
 
 function evCat(event_type: string): EvCatConfig {
@@ -1901,15 +1508,15 @@ function evSummary(event_type: string, p: Record<string, unknown>, pipeline?: st
       const count = s("file_count") || String(files.length);
       return { title: `Merge conflict · ${count} file(s)`, chips: files.slice(0, 3).map(f => f.split("/").pop() ?? f) };
     }
-    case "pre_run_conflict_resolved":   return { title: "Merge conflict resolved", chips: [] };
-    case "pre_run_conflict_failed":     return { title: "Conflict resolution failed", chips: [] };
-    case "conv_merged":                 return { title: "Branch merged", chips: [] };
-    case "conv_rebased":                return { title: "Branch rebased", chips: [] };
-    case "pre_publish_pull_clean":      return { title: "Pre-publish sync clean", chips: [] };
-    case "pre_publish_pull_conflict":   return { title: "Pre-publish sync conflict", chips: [] };
-    case "pre_publish_pull_resolved":   return { title: "Pre-publish conflict resolved", chips: [] };
-    case "pre_publish_pull_failed":     return { title: "Pre-publish sync failed", chips: [] };
-    case "pre_publish_pull_skipped":    return { title: "Pre-publish sync skipped", chips: [] };
+    case "pre_run_conflict_resolved": return { title: "Merge conflict resolved", chips: [] };
+    case "pre_run_conflict_failed": return { title: "Conflict resolution failed", chips: [] };
+    case "conv_merged": return { title: "Branch merged", chips: [] };
+    case "conv_rebased": return { title: "Branch rebased", chips: [] };
+    case "pre_publish_pull_clean": return { title: "Pre-publish sync clean", chips: [] };
+    case "pre_publish_pull_conflict": return { title: "Pre-publish sync conflict", chips: [] };
+    case "pre_publish_pull_resolved": return { title: "Pre-publish conflict resolved", chips: [] };
+    case "pre_publish_pull_failed": return { title: "Pre-publish sync failed", chips: [] };
+    case "pre_publish_pull_skipped": return { title: "Pre-publish sync skipped", chips: [] };
     case "merge_queued":
       return { title: `Merge queued: ${s("branch_name") || s("branch")}`, chips: [] };
     case "merge_started":
@@ -1920,9 +1527,9 @@ function evSummary(event_type: string, p: Record<string, unknown>, pipeline?: st
       return { title: `Merge failed: ${s("branch_name") || s("branch")}`, chips: [] };
     case "merge_conflict":
       return { title: "Merge conflict", chips: [] };
-    case "git_push_recovery_started":   return { title: "Push recovery started", chips: [] };
+    case "git_push_recovery_started": return { title: "Push recovery started", chips: [] };
     case "git_push_recovery_completed": return { title: "Push recovery completed", chips: [] };
-    case "git_push_recovery_failed":    return { title: "Push recovery failed", chips: [] };
+    case "git_push_recovery_failed": return { title: "Push recovery failed", chips: [] };
     case "watchdog_stalled":
       return { title: "Agent stalled", chips: [`${s("idle_secs")}s idle`] };
     case "watchdog_zombie":

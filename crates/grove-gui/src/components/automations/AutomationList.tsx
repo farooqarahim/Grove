@@ -375,6 +375,31 @@ export function AutomationList({ projectId, projects: _projects, onSelect }: Pro
         </div>
       </div>
 
+      {/* ── Experimental banner ── */}
+      <div
+        style={{
+          margin: "12px 28px 0",
+          padding: "10px 16px",
+          borderRadius: 8,
+          background: "rgba(234,179,8,0.07)",
+          border: "1px solid rgba(234,179,8,0.22)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: 14 }}>⚗️</span>
+        <div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#EAB308", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            Experimental
+          </span>
+          <span style={{ fontSize: 12, color: "#92817A", marginLeft: 8 }}>
+            Automations are under active development. Expect rough edges and breaking changes.
+          </span>
+        </div>
+      </div>
+
       {/* ── Card list ── */}
       <div
         style={{
