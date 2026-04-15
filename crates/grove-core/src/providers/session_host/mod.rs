@@ -26,6 +26,7 @@ impl SessionKey {
     }
 }
 
+pub mod host;
 pub mod protocol;
 
 #[cfg(test)]
