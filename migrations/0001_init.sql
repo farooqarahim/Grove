@@ -464,9 +464,10 @@ CREATE TABLE IF NOT EXISTS grove_graphs (
     conversation_id       TEXT NOT NULL REFERENCES conversations(id),
     title                 TEXT NOT NULL,
     description           TEXT,
+    objective             TEXT,
     status                TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','inprogress','closed','failed')),
-    runtime_status        TEXT NOT NULL DEFAULT 'idle' CHECK(runtime_status IN ('idle','running','paused','aborted')),
-    parsing_status        TEXT NOT NULL DEFAULT 'pending' CHECK(parsing_status IN ('pending','planning','parsing','complete','error')),
+    runtime_status        TEXT NOT NULL DEFAULT 'idle' CHECK(runtime_status IN ('idle','queued','running','paused','aborted')),
+    parsing_status        TEXT NOT NULL DEFAULT 'pending' CHECK(parsing_status IN ('pending','planning','parsing','generating','draft_ready','complete','error')),
     execution_mode        TEXT NOT NULL DEFAULT 'sequential' CHECK(execution_mode IN ('sequential','parallel')),
     active                INTEGER NOT NULL DEFAULT 1,
     rerun_count           INTEGER NOT NULL DEFAULT 0,
@@ -481,6 +482,8 @@ CREATE TABLE IF NOT EXISTS grove_graphs (
     git_commit_sha        TEXT,
     git_pr_url            TEXT,
     git_merge_status      TEXT CHECK(git_merge_status IN ('pending','merged','failed')),
+    pipeline_error        TEXT,
+    provider              TEXT,
     created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -562,6 +565,167 @@ CREATE TABLE IF NOT EXISTS graph_config (
 );
 
 CREATE INDEX IF NOT EXISTS idx_graph_config_graph ON graph_config(graph_id);
+
+CREATE TABLE IF NOT EXISTS graph_clarifications (
+    id           TEXT PRIMARY KEY,
+    graph_id     TEXT NOT NULL REFERENCES grove_graphs(id) ON DELETE CASCADE,
+    question     TEXT NOT NULL,
+    answer       TEXT,
+    answered     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_graph_clarifications_graph ON graph_clarifications(graph_id);
+
+-- ── Phase Checkpoints (gate decisions per agent) ────────────────────────────
+
+CREATE TABLE IF NOT EXISTS phase_checkpoints (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id        TEXT NOT NULL,
+    agent         TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    decision      TEXT,
+    decided_at    TEXT,
+    artifact_path TEXT,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_phase_checkpoints_run ON phase_checkpoints(run_id);
+
+-- ── Stream Events (real-time agent output) ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS stream_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id        TEXT NOT NULL,
+    session_id    TEXT,
+    kind          TEXT NOT NULL,
+    content_json  TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_stream_events_run ON stream_events(run_id, id);
+
+-- ── Run Artifacts (files produced by agents) ────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS run_artifacts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id        TEXT NOT NULL,
+    agent         TEXT NOT NULL,
+    filename      TEXT NOT NULL,
+    content_hash  TEXT NOT NULL,
+    size_bytes    INTEGER NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_artifacts_run ON run_artifacts(run_id, agent);
+
+-- ── QA Messages (bidirectional agent ↔ user Q&A) ────────────────────────────
+
+CREATE TABLE IF NOT EXISTS qa_messages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       TEXT NOT NULL,
+    session_id   TEXT,
+    direction    TEXT NOT NULL,
+    content      TEXT NOT NULL,
+    options_json TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_qa_messages_run ON qa_messages(run_id, id);
+
+-- ── Automations ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS automations (
+    id                         TEXT PRIMARY KEY,
+    project_id                 TEXT NOT NULL REFERENCES projects(id),
+    name                       TEXT NOT NULL,
+    description                TEXT,
+    enabled                    INTEGER NOT NULL DEFAULT 1,
+    trigger_type               TEXT NOT NULL,
+    trigger_config             TEXT NOT NULL,
+    default_provider           TEXT,
+    default_model              TEXT,
+    default_budget_usd         REAL,
+    default_pipeline           TEXT,
+    default_permission_mode    TEXT,
+    session_mode               TEXT NOT NULL DEFAULT 'new',
+    dedicated_conversation_id  TEXT REFERENCES conversations(id),
+    source_path                TEXT,
+    last_triggered_at          TEXT,
+    notifications_json         TEXT,
+    created_at                 TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at                 TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_automations_project ON automations(project_id);
+CREATE INDEX IF NOT EXISTS idx_automations_enabled_trigger ON automations(enabled, trigger_type);
+
+CREATE TABLE IF NOT EXISTS automation_steps (
+    id                TEXT PRIMARY KEY,
+    automation_id     TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    step_key          TEXT NOT NULL,
+    ordinal           INTEGER NOT NULL,
+    objective         TEXT NOT NULL,
+    depends_on        TEXT,
+    provider          TEXT,
+    model             TEXT,
+    budget_usd        REAL,
+    pipeline          TEXT,
+    permission_mode   TEXT,
+    condition         TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(automation_id, step_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_steps_automation ON automation_steps(automation_id);
+
+CREATE TABLE IF NOT EXISTS automation_runs (
+    id               TEXT PRIMARY KEY,
+    automation_id    TEXT NOT NULL REFERENCES automations(id),
+    state            TEXT NOT NULL DEFAULT 'pending',
+    trigger_info     TEXT,
+    conversation_id  TEXT REFERENCES conversations(id),
+    started_at       TEXT,
+    completed_at     TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_runs_automation ON automation_runs(automation_id);
+CREATE INDEX IF NOT EXISTS idx_automation_runs_state ON automation_runs(state);
+
+CREATE TABLE IF NOT EXISTS automation_run_steps (
+    id                  TEXT PRIMARY KEY,
+    automation_run_id   TEXT NOT NULL REFERENCES automation_runs(id) ON DELETE CASCADE,
+    step_id             TEXT NOT NULL REFERENCES automation_steps(id),
+    step_key            TEXT NOT NULL,
+    state               TEXT NOT NULL DEFAULT 'pending',
+    task_id             TEXT REFERENCES tasks(id),
+    run_id              TEXT REFERENCES runs(id),
+    condition_result    INTEGER,
+    error               TEXT,
+    started_at          TEXT,
+    completed_at        TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_steps_run ON automation_run_steps(automation_run_id);
+CREATE INDEX IF NOT EXISTS idx_run_steps_task ON automation_run_steps(task_id);
+
+CREATE TABLE IF NOT EXISTS automation_events (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type         TEXT NOT NULL,
+    payload            TEXT NOT NULL,
+    source             TEXT,
+    automation_id      TEXT REFERENCES automations(id),
+    automation_run_id  TEXT REFERENCES automation_runs(id),
+    created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_events_run ON automation_events(automation_run_id);
 
 -- ── Pipeline Stages ──────────────────────────────────────────────────────────
 

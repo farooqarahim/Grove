@@ -20,6 +20,9 @@ fn setup() -> (TempDir, GroveConfig, Arc<dyn Provider>) {
     let mut cfg: GroveConfig = serde_yaml::from_str(DEFAULT_CONFIG_YAML).unwrap();
     // Disable Claude Code provider so planning uses hardcoded fallback (no CLI calls).
     cfg.providers.claude_code.enabled = false;
+    // MockProvider returns free-form text; disable strict judge/reviewer parsing
+    // so runs can reach the Completed state without a real model verdict.
+    cfg.discipline.strict_verdicts = false;
     // Minimal pipeline: Builder + Tester only (fast, no planner agent needed).
     cfg.orchestration.enforce_design_first = false;
     cfg.agents.reviewer.enabled = false;

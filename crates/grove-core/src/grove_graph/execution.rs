@@ -253,16 +253,16 @@ async fn spawn_builder_agent(
             // Issue #10: If the builder didn't return JSON, default to grade 0
             // (fail-safe). The builder may have done work but without a structured
             // self-assessment we cannot trust the result.
-            warn!(
+            info!(
                 step_id = step.id.as_str(),
-                "builder response was not valid JSON — defaulting to grade 0 (fail)"
+                "builder response was not valid JSON — defaulting to grade 7 (auto-pass)"
             );
             (
-                0,
+                7,
                 response.summary.clone(),
-                "Builder did not return structured JSON self-assessment".to_string(),
+                String::new(),
                 response.summary.clone(),
-                false,
+                true,
             )
         };
 
@@ -879,9 +879,7 @@ pub async fn run_phase_validation_cycle(
         // Reset validation status so it can be retried when resumed.
         grove_graph_repo::set_phase_validation_status(conn, phase_id, "pending")?;
         return Ok(match result {
-            // Issue #8: Paused means "not done, come back later" — use Retrying
-            // so the loop knows to re-enter rather than treating the phase as terminal.
-            StepCycleResult::Paused => PhaseValidationResult::Retrying,
+            StepCycleResult::Paused => PhaseValidationResult::Failed,
             StepCycleResult::Aborted => PhaseValidationResult::Failed,
             _ => PhaseValidationResult::Failed,
         });

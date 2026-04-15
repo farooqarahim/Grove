@@ -1183,14 +1183,13 @@ fn run_command_write(cmd: &mut Command, label: &str) -> GroveResult<Output> {
 
 fn command_path() -> String {
     let shell = crate::capability::shell_path();
-    // In tests, include the process PATH so test-injected binaries (e.g. fake
-    // `gh`) are found before the real ones.
-    #[cfg(test)]
-    {
-        let process = std::env::var("PATH").unwrap_or_default();
-        if !process.is_empty() {
-            return format!("{process}:{shell}");
-        }
+    // Include the process PATH so test-injected binaries (e.g. fake `gh`)
+    // and PATH modifications made by the host process are honored, with
+    // the login-shell PATH appended as a fallback for GUI contexts
+    // (e.g. Tauri) where the process PATH may be minimal.
+    let process = std::env::var("PATH").unwrap_or_default();
+    if !process.is_empty() {
+        return format!("{process}:{shell}");
     }
     shell.to_string()
 }
