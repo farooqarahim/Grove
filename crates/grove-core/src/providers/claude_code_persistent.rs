@@ -442,6 +442,7 @@ fn build_persistent_turn_request(
         grove_session_id: Some(grove_session_id.to_string()),
         input_handle_callback: None,
         mcp_config_path: host.mcp_config_path.clone(),
+        conversation_id: None,
     }
 }
 

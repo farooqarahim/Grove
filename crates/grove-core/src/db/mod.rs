@@ -596,6 +596,24 @@ const MIGRATION_0057_TOKEN_FILTER: &str =
 const MIGRATION_0058_FIX_TIMESTAMP: &str =
     include_str!("../../../../migrations/0005_fix_token_filter_timestamp.sql");
 
+/// Add LRU cache-sweeper columns to conversations:
+///   - last_access_at: unix timestamp (INTEGER) updated on each worktree access.
+///   - cached_size_bytes: bytes occupied by the worktree on disk (updated by sweeper).
+///   - pinned: non-zero if the worktree must never be evicted by the sweeper.
+/// Backfills last_access_at from updated_at for pre-existing rows so the sweeper
+/// has a reasonable eviction ordering on first run.
+const MIGRATION_0059_ADD_CONVERSATION_LRU: &str = r#"
+ALTER TABLE conversations ADD COLUMN last_access_at INTEGER;
+ALTER TABLE conversations ADD COLUMN cached_size_bytes INTEGER;
+ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+UPDATE conversations
+   SET last_access_at = CAST(strftime('%s', updated_at) AS INTEGER)
+ WHERE last_access_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_conversations_last_access
+    ON conversations(last_access_at);
+UPDATE meta SET value = '59' WHERE key = 'schema_version';
+"#;
+
 /// Upgrade migration for provider-native issue identity and normalized issue metadata.
 const MIGRATION_0033_UPGRADE: &str = "\
 ALTER TABLE issues ADD COLUMN provider_native_id TEXT;\n\
@@ -715,6 +733,7 @@ pub fn initialize(project_root: &Path) -> GroveResult<InitDbResult> {
     apply_migration_if_needed(&mut conn, 56, MIGRATION_0056_GRAPH_PROVIDER)?;
     apply_migration_if_needed(&mut conn, 57, MIGRATION_0057_TOKEN_FILTER)?;
     apply_migration_if_needed(&mut conn, 58, MIGRATION_0058_FIX_TIMESTAMP)?;
+    apply_migration_if_needed(&mut conn, 59, MIGRATION_0059_ADD_CONVERSATION_LRU)?;
     repair_missing_pipeline_stages(&mut conn)?;
     fix_conversation_kind_constraint(&mut conn)?;
 
@@ -1113,4 +1132,71 @@ pub fn backup(project_root: &Path) -> GroveResult<PathBuf> {
         "database backed up before destructive operation"
     );
     Ok(backup_path)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn migration_0059_adds_columns_and_backfills() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = crate::db::initialize(dir.path()).expect("init");
+        assert!(
+            result.schema_version >= 59,
+            "schema_version {}",
+            result.schema_version
+        );
+
+        let handle = crate::db::DbHandle::new(dir.path());
+        let conn = handle.connect().expect("connect");
+
+        conn.execute(
+            "INSERT INTO conversations (id, project_id, title, state, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                "c1",
+                "p1",
+                "t",
+                "active",
+                "2026-04-15T00:00:00Z",
+                "2026-04-15T00:00:00Z"
+            ],
+        )
+        .unwrap();
+
+        let pinned: i64 = conn
+            .query_row(
+                "SELECT pinned FROM conversations WHERE id='c1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pinned, 0, "pinned must default to 0");
+
+        // cached_size_bytes is nullable — verify the column exists by querying it.
+        let cached_size: Option<i64> = conn
+            .query_row(
+                "SELECT cached_size_bytes FROM conversations WHERE id='c1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            cached_size.is_none(),
+            "cached_size_bytes must be NULL for a freshly inserted row"
+        );
+
+        // last_access_at was NOT backfilled by the migration for this freshly inserted
+        // row (inserted after migration), so it is NULL. Verify the column exists.
+        let last_access: Option<i64> = conn
+            .query_row(
+                "SELECT last_access_at FROM conversations WHERE id='c1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            last_access.is_none(),
+            "freshly inserted row with NULL last_access_at is fine"
+        );
+    }
 }

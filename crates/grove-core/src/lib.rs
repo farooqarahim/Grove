@@ -5,6 +5,7 @@ pub mod budget;
 pub mod capability;
 pub mod checkpoint;
 pub mod config;
+pub mod conversations;
 pub mod db;
 pub mod doctor;
 pub mod errors;

@@ -8,7 +8,7 @@ use tempfile::tempdir;
 fn ctx() -> DispatchCtx {
     let tmp = tempdir().unwrap();
     let cfg = DaemonConfig::from_project_root(tmp.path()).unwrap();
-    DispatchCtx::new(cfg, DrainSignal::new())
+    DispatchCtx::new(cfg, DrainSignal::new(), grove_daemon::session_host::build_registry(900, 8))
 }
 
 fn ctx_with_signal() -> (DispatchCtx, DrainSignal) {
@@ -18,7 +18,10 @@ fn ctx_with_signal() -> (DispatchCtx, DrainSignal) {
     grove_core::db::initialize(&path).expect("db init");
     let cfg = DaemonConfig::from_project_root(&path).unwrap();
     let signal = DrainSignal::new();
-    (DispatchCtx::new(cfg, signal.clone()), signal)
+    (
+        DispatchCtx::new(cfg, signal.clone(), grove_daemon::session_host::build_registry(900, 8)),
+        signal,
+    )
 }
 
 #[tokio::test]

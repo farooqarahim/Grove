@@ -214,6 +214,7 @@ impl Transport for SocketTransport {
                 "model": req.model,
                 "permission_mode": req.permission_mode,
                 "conversation_id": req.conversation_id,
+                "continue_last": req.continue_last,
             }),
         )?;
         let run_id = val

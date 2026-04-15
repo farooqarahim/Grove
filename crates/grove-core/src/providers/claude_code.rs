@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,10 +9,13 @@ use serde::Deserialize;
 
 use super::gates::{self, GateDecision, PermissionRequest};
 use super::line_reader::{LineError, TimedLineReader};
+use super::session_host::host::ClaudeSessionHost;
+use super::session_host::protocol::StreamEvent as PersistentStreamEvent;
+use super::session_host::{SessionHostRegistry, SessionKey};
 use super::stream_parser::{self, StreamEvent, StreamResult};
 use super::timeout;
 use super::{
-    Provider, ProviderRequest, ProviderResponse, QaSource, SessionContinuityPolicy,
+    NullSink, Provider, ProviderRequest, ProviderResponse, QaSource, SessionContinuityPolicy,
     StreamOutputEvent, StreamSink,
 };
 
@@ -113,7 +116,6 @@ impl QaSourcePtr {
     }
 }
 
-#[derive(Debug)]
 pub struct ClaudeCodeProvider {
     pub command: String,
     pub timeout_secs: u64,
@@ -130,6 +132,29 @@ pub struct ClaudeCodeProvider {
     pub max_open_files: Option<u32>,
     /// Abort handle for subprocess termination. Set via `set_abort_handle`.
     abort_handle: Mutex<Option<AbortHandle>>,
+    /// Optional persistent session registry. When `Some` and the request carries
+    /// a `conversation_id` in `SkipAll` mode, `execute_streaming` reuses a live
+    /// subprocess instead of cold-spawning a new one.
+    session_registry: Option<Arc<dyn SessionHostRegistry>>,
+}
+
+impl std::fmt::Debug for ClaudeCodeProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClaudeCodeProvider")
+            .field("command", &self.command)
+            .field("timeout_secs", &self.timeout_secs)
+            .field("permission_mode", &self.permission_mode)
+            .field("allowed_tools", &self.allowed_tools)
+            .field("gatekeeper_model", &self.gatekeeper_model)
+            .field("max_output_bytes", &self.max_output_bytes)
+            .field("max_file_size_mb", &self.max_file_size_mb)
+            .field("max_open_files", &self.max_open_files)
+            .field(
+                "session_registry",
+                &self.session_registry.as_ref().map(|_| "<registry>"),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 impl ClaudeCodeProvider {
@@ -140,8 +165,13 @@ impl ClaudeCodeProvider {
         allowed_tools: Vec<String>,
         gatekeeper_model: Option<String>,
     ) -> Self {
+        // `GROVE_CLAUDE_BIN` is an integration-test affordance that lets
+        // tests point the provider at a fake shell script without writing
+        // a full grove config. Honored in all code paths (cold + warm)
+        // because the env var is read exactly once, here, at construction.
+        let command = std::env::var("GROVE_CLAUDE_BIN").unwrap_or_else(|_| command.into());
         Self {
-            command: command.into(),
+            command,
             timeout_secs,
             permission_mode,
             allowed_tools,
@@ -150,6 +180,7 @@ impl ClaudeCodeProvider {
             max_file_size_mb: None,
             max_open_files: None,
             abort_handle: Mutex::new(None),
+            session_registry: None,
         }
     }
 
@@ -167,6 +198,116 @@ impl ClaudeCodeProvider {
         self.max_file_size_mb = max_file_size_mb;
         self.max_open_files = max_open_files;
         self
+    }
+
+    /// Attach a persistent session registry. When set, `execute_streaming`
+    /// will route `SkipAll` requests that carry a `conversation_id` through a
+    /// live subprocess instead of cold-spawning.
+    pub fn with_session_registry(
+        mut self,
+        registry: Option<Arc<dyn SessionHostRegistry>>,
+    ) -> Self {
+        self.session_registry = registry;
+        self
+    }
+}
+
+impl ClaudeCodeProvider {
+    /// Warm-path execution: send a turn to an existing (or freshly spawned)
+    /// persistent `claude` subprocess via the session registry, then map the
+    /// [`TurnOutcome`] to a [`ProviderResponse`].
+    ///
+    /// Only called when `permission_mode == SkipAll`, `session_registry` is
+    /// `Some`, and `request.conversation_id` is `Some`. All three are checked
+    /// by the caller (`execute_streaming`).
+    fn execute_streaming_warm(
+        &self,
+        request: &ProviderRequest,
+        sink: &dyn StreamSink,
+        reg: &Arc<dyn SessionHostRegistry>,
+        conv_id: &str,
+    ) -> GroveResult<ProviderResponse> {
+        let key = SessionKey::new(conv_id, PathBuf::from(&request.worktree_path));
+        let resume = request.provider_session_id.clone();
+        let prompt = request.instructions.clone();
+        let command = self.command.clone();
+        let cwd = PathBuf::from(&request.worktree_path);
+        let reg = Arc::clone(reg);
+
+        let handle = tokio::runtime::Handle::try_current().map_err(|_| {
+            GroveError::Runtime(
+                "session-registry warm path requires an active Tokio runtime".into(),
+            )
+        })?;
+        let outcome = tokio::task::block_in_place(|| handle.block_on(async move {
+            let host = reg
+                .get_or_spawn(
+                    key,
+                    resume,
+                    Box::new(move |sid: Option<&str>| {
+                        let sid_owned = sid.map(|s| s.to_string());
+                        let command = command.clone();
+                        let cwd = cwd.clone();
+                        Box::pin(async move {
+                            ClaudeSessionHost::spawn(
+                                std::path::Path::new(&command),
+                                &cwd,
+                                sid_owned.as_deref(),
+                            )
+                            .await
+                        })
+                    }),
+                )
+                .await?;
+            host.send_turn(&prompt).await
+        }))?;
+
+        // NOTE: warm path emits all events post-turn; streaming granularity is turn-level,
+        // not token-level (a consequence of ClaudeSessionHost::send_turn buffering events).
+        // Emit individual turn events through the sink.
+        let mut summary_parts: Vec<String> = Vec::new();
+        for ev in &outcome.events {
+            match ev {
+                PersistentStreamEvent::AssistantText(t) => {
+                    summary_parts.push(t.clone());
+                    sink.on_event(StreamOutputEvent::AssistantText { text: t.clone() });
+                }
+                PersistentStreamEvent::System { session_id, .. } => {
+                    sink.on_event(StreamOutputEvent::System {
+                        message: String::new(),
+                        session_id: session_id.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        let summary = summary_parts.join("\n");
+
+        // Emit terminal Result event (mirrors cold-path behaviour).
+        sink.on_event(StreamOutputEvent::Result {
+            text: summary.clone(),
+            cost_usd: Some(outcome.cost_usd),
+            is_error: outcome.is_error,
+            session_id: outcome.session_id.clone(),
+        });
+
+        if outcome.is_error {
+            return Err(GroveError::Runtime(format!(
+                "persistent claude turn reported is_error=true (session_id={:?})",
+                outcome.session_id
+            )));
+        }
+
+        Ok(ProviderResponse {
+            summary,
+            // changed_files: not populated on the warm path; callers needing file-level
+            // change info recompute via git_ops::changed_files_since (as scope enforcement does).
+            changed_files: vec![],
+            cost_usd: Some(outcome.cost_usd),
+            provider_session_id: outcome.session_id,
+            pid: None, // TODO(B1): surface persistent host PID once TurnOutcome carries it (see Task 9 prep)
+        })
     }
 }
 
@@ -188,6 +329,20 @@ impl Provider for ClaudeCodeProvider {
     }
 
     fn execute(&self, request: &ProviderRequest) -> GroveResult<ProviderResponse> {
+        // Warm path: same three conditions as execute_streaming — when a
+        // registry is attached, the request carries a conversation_id, and
+        // the mode is SkipAll, reuse the persistent host. Non-streaming
+        // callers get a NullSink (events are still buffered into the
+        // ProviderResponse summary by execute_streaming_warm).
+        if self.permission_mode == PermissionMode::SkipAll {
+            if let (Some(reg), Some(conv_id)) =
+                (&self.session_registry, &request.conversation_id)
+            {
+                let sink = NullSink;
+                return self.execute_streaming_warm(request, &sink, reg, conv_id);
+            }
+        }
+
         // Fast path: skip all permission checks.
         if self.permission_mode == PermissionMode::SkipAll {
             return self.run_once(request, None);
@@ -258,6 +413,19 @@ impl Provider for ClaudeCodeProvider {
         request: &ProviderRequest,
         sink: &dyn StreamSink,
     ) -> GroveResult<ProviderResponse> {
+        // Warm path: route through persistent session registry when all three
+        // conditions hold:
+        //   1. A registry is attached to this provider.
+        //   2. The request carries a conversation_id (keying the session).
+        //   3. PermissionMode is SkipAll — gate modes require re-spawn capability.
+        if self.permission_mode == PermissionMode::SkipAll {
+            if let (Some(reg), Some(conv_id)) =
+                (&self.session_registry, &request.conversation_id)
+            {
+                return self.execute_streaming_warm(request, sink, reg, conv_id);
+            }
+        }
+
         // Fast path: skip all permission checks.
         if self.permission_mode == PermissionMode::SkipAll {
             return self.run_once_streaming(request, None, sink);
@@ -2131,6 +2299,7 @@ cat >/dev/null
             grove_session_id: None,
             input_handle_callback: Some(held_input_cb),
             mcp_config_path: None,
+            conversation_id: None,
         };
 
         let response = provider

@@ -179,6 +179,11 @@ pub struct RunOptions {
                 + Sync,
         >,
     >,
+    /// Session host registry for warm-path Claude Code routing.
+    /// When `Some`, `build_provider` threads it into `ClaudeCodeProvider` via
+    /// `.with_session_registry(...)`. Remains `None` everywhere until the daemon
+    /// wires the real registry in Task 11.
+    pub session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
 }
 
 impl std::fmt::Debug for RunOptions {
@@ -213,6 +218,10 @@ impl std::fmt::Debug for RunOptions {
             .field(
                 "run_control_callback",
                 &self.run_control_callback.as_ref().map(|_| "<callback>"),
+            )
+            .field(
+                "session_host_registry",
+                &self.session_host_registry.as_ref().map(|_| "<registry>"),
             )
             .finish()
     }
@@ -407,6 +416,7 @@ pub fn build_provider(
     project_root: &Path,
     provider_override: Option<&str>,
     permission_override: Option<PermissionMode>,
+    session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
 ) -> crate::errors::GroveResult<Arc<dyn Provider>> {
     use crate::errors::GroveError;
     use crate::llm::{LlmAuthMode, LlmProviderKind, LlmRouter};
@@ -436,7 +446,8 @@ pub fn build_provider(
         .with_resource_limits(
             cfg.providers.claude_code.max_file_size_mb,
             cfg.providers.claude_code.max_open_files,
-        );
+        )
+        .with_session_registry(session_host_registry);
         // Always wrap Claude Code with the persistent provider — persistent
         // mode is now the default execution path for all agents.
         return Ok(Arc::new(ClaudeCodePersistentProvider::new(
@@ -873,12 +884,12 @@ pub fn execute_objective_with_sink(
     save_stage_checkpoint(&conn, &run_id, "before_executing");
     transitions::apply_transition(&conn, &run_id, RunState::Planning, RunState::Executing)?;
 
-    let seeded_provider_thread_id = if provider.session_continuity_policy()
-        == crate::providers::SessionContinuityPolicy::DetachedResume
-    {
-        options.resume_provider_session_id.as_deref()
-    } else {
-        None
+    let seeded_provider_thread_id = match provider.session_continuity_policy() {
+        crate::providers::SessionContinuityPolicy::DetachedResume
+        | crate::providers::SessionContinuityPolicy::LockedPerProcess => {
+            options.resume_provider_session_id.as_deref()
+        }
+        crate::providers::SessionContinuityPolicy::None => None,
     };
     // Record the provider, model, and any seeded resumable thread for
     // "Continue Task" and same-run detached-resume continuity.
@@ -4078,12 +4089,20 @@ mod tests {
     }
 
     #[test]
-    fn effective_pause_after_skips_pipeline_gates_when_disabled() {
+    fn effective_pause_after_merges_pipeline_gates_even_when_disabled() {
+        // disable_phase_gates is currently a no-op; gates are always merged.
+        // The early-return optimisation was reverted as out-of-scope for B1-0.
         let pause_after = effective_pause_after(
             &[crate::agents::AgentType::Reviewer],
             &[crate::agents::AgentType::BuildPrd],
             true,
         );
-        assert_eq!(pause_after, vec![crate::agents::AgentType::Reviewer]);
+        assert_eq!(
+            pause_after,
+            vec![
+                crate::agents::AgentType::Reviewer,
+                crate::agents::AgentType::BuildPrd,
+            ]
+        );
     }
 }

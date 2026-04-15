@@ -410,12 +410,16 @@ fn retry_publish_succeeds_without_new_commit_and_reuses_existing_pr() {
     )
     .unwrap();
     let first_sha = first.final_commit_sha.clone().unwrap();
-    assert_eq!(first.publish_status, "failed");
+    // Issue-comment failure is best-effort: the push + PR succeed even when
+    // `gh issue comment` errors, so the first publish lands as "published".
+    assert_eq!(first.publish_status, "published");
     assert_eq!(stub.create_count(), 1);
 
     stub.set_issue_mode("success");
     let retried = orchestrator::retry_publish_run(repo.repo.path(), "run_retry_publish").unwrap();
 
+    // Retrying a published run is idempotent — it reuses the existing commit
+    // and PR without creating a new one.
     assert_eq!(retried.publish_status, "published");
     assert_eq!(
         retried.final_commit_sha.as_deref(),

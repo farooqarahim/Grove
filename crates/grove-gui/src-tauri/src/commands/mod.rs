@@ -217,6 +217,7 @@ pub(crate) fn drain_task_queue(
             &project_root,
             task.provider.as_deref(),
             task_permission_mode.clone(),
+            None,
         ) {
             Ok(p) => p,
             Err(e) => {
@@ -364,6 +365,7 @@ pub(crate) fn drain_task_queue(
             on_run_created,
             input_handle_callback,
             run_control_callback,
+            session_host_registry: None,
         };
 
         let sink_ref: Option<&dyn grove_core::providers::StreamSink> = stream_sink

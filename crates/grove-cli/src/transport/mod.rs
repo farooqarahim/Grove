@@ -25,8 +25,9 @@ pub struct StartRunRequest {
     pub model: Option<String>,
     pub permission_mode: Option<String>,
     pub conversation_id: Option<String>,
-    /// Reserved for future use (continue from last session).
-    #[allow(dead_code)]
+    /// When true, resume the latest active conversation and roll forward its
+    /// last completed session's `provider_session_id` so the provider can
+    /// continue the same multi-turn context.
     pub continue_last: bool,
     /// Reserved for future use (link to an issue).
     #[allow(dead_code)]

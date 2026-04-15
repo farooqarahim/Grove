@@ -21,7 +21,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use tracing::{debug, info, warn};
 
 use crate::db::repositories::grove_graph_repo::{self, GraphStepRow};
@@ -220,23 +220,6 @@ pub async fn run_graph_loop(
         }
 
         // ── 3. GRAPH COMPLETION CHECK ───────────────────────────────────────
-        // Zero-phase guard (Issue #9): if planning produced no phases, fail early.
-        let phase_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM graph_phases WHERE graph_id = ?1",
-                params![graph_id],
-                |r| r.get(0),
-            )
-            .unwrap_or(0);
-
-        if phase_count == 0 {
-            grove_graph_repo::update_graph_status(conn, graph_id, "failed")?;
-            grove_graph_repo::set_runtime_status(conn, graph_id, RuntimeStatus::Idle.as_str())?;
-            return Ok(LoopIterationResult::Error(
-                "graph has no phases — planning may have failed".into(),
-            ));
-        }
-
         let all_closed = grove_graph_repo::all_phases_closed(conn, graph_id)?;
         let all_passed = grove_graph_repo::all_validations_passed(conn, graph_id)?;
 

@@ -504,6 +504,7 @@ fn run_agents_inner(
                                         grove_session_id: None,
                                         input_handle_callback: None,
                                         mcp_config_path: None,
+                                        conversation_id: conversation_id.map(|s| s.to_string()),
                                     };
 
                                     let cr_result = provider.execute(&cr_request);
@@ -812,6 +813,7 @@ fn run_agents_inner(
                 cfg,
                 model,
                 cb,
+                conversation_id,
             ) {
                 tracing::warn!(
                     error = %e,
@@ -942,12 +944,13 @@ fn run_agents_persistent(
 
     let _gitignore = crate::worktree::gitignore::GitignoreFilter::load(project_root);
     let continuity_policy = provider_arc.session_continuity_policy();
-    let pending_resume: Option<String> =
-        if continuity_policy == crate::providers::SessionContinuityPolicy::DetachedResume {
+    let pending_resume: Option<String> = match continuity_policy {
+        crate::providers::SessionContinuityPolicy::DetachedResume
+        | crate::providers::SessionContinuityPolicy::LockedPerProcess => {
             initial_provider_session_id
-        } else {
-            None
-        };
+        }
+        crate::providers::SessionContinuityPolicy::None => None,
+    };
     // Seed the host with the resume session ID so the first turn can continue
     // an existing coding agent conversation.
     if let Some(ref sid) = pending_resume {
@@ -962,6 +965,10 @@ fn run_agents_persistent(
     let mut stored_decomposition: Option<(TaskDecomposition, PathBuf)> = None;
     let mut decomposition_executed = false;
     let mut spawn_wave_count: u32 = 0;
+    // Whether the resume session ID is still held in host.provider_thread_id for
+    // the first agent. Set to true when pending_resume is Some, cleared after the
+    // first agent consumes it so subsequent agents get a fresh session.
+    let mut resume_held = pending_resume.is_some();
 
     let mut work_plan: Vec<Vec<AgentType>> = work_plan_input.to_vec();
     let mut owned_steps: Option<Vec<PlanStep>> = plan_steps.map(|s| s.to_vec());
@@ -1040,8 +1047,10 @@ fn run_agents_persistent(
                     project_root,
                     project_configs,
                     run_artifacts_dir,
+                    conversation_id,
                 )?;
             }
+            resume_held = false; // decomposition consumed stage 0; next stage's agents get a fresh session
             stage_idx += 1;
             continue;
         }
@@ -1052,7 +1061,14 @@ fn run_agents_persistent(
         for &agent_type in &stage {
             // Clear the provider session ID between different agent roles to prevent
             // "session already in use" errors — each agent type gets a fresh session.
-            host.provider_thread_id = None;
+            // Exception: when a resume session ID was seeded before the loop
+            // (pending_resume is Some), the first agent must inherit it; clearing
+            // is deferred until the second agent onward.
+            if resume_held {
+                resume_held = false;
+            } else {
+                host.provider_thread_id = None;
+            }
 
             'agent_run: loop {
                 let _ = crate::db::repositories::phase_checkpoints_repo::update_run_phase(
@@ -2525,6 +2541,7 @@ fn wait_for_persistent_gate_decision(
 /// Run all waves of decomposed sub-tasks produced by the architect.
 /// Each wave's tasks run in parallel (bounded by `max_agents`); waves are sequential.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn run_task_waves(
     conn: &mut Connection,
     run_id: &str,
@@ -2542,6 +2559,7 @@ fn run_task_waves(
     project_root: &Path,
     project_configs: Option<&crate::config::agent_config::ProjectConfigs>,
     run_artifacts_dir: &Path,
+    conversation_id: Option<&str>,
 ) -> GroveResult<()> {
     let waves = task_decomposer::compute_waves(&decomp.tasks)?;
     let total_waves = waves.len();
@@ -2574,6 +2592,7 @@ fn run_task_waves(
                 project_root,
                 project_configs,
                 run_artifacts_dir,
+                conversation_id,
             )?;
         }
     }
@@ -2582,6 +2601,7 @@ fn run_task_waves(
 }
 
 /// Run a single wave of tasks sequentially on the shared worktree.
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn run_task_wave(
     conn: &mut Connection,
@@ -2599,6 +2619,7 @@ fn run_task_wave(
     project_root: &Path,
     project_configs: Option<&crate::config::agent_config::ProjectConfigs>,
     artifacts_dir: &Path,
+    conversation_id: Option<&str>,
 ) -> GroveResult<()> {
     // All tasks run sequentially on the shared worktree — no parallel forks.
     for task in wave_tasks {
@@ -2658,6 +2679,7 @@ fn run_task_wave(
             grove_session_id: None,
             input_handle_callback: None,
             mcp_config_path: None,
+            conversation_id: conversation_id.map(|s| s.to_string()),
         };
 
         let hb_db_path = resolve_db_path(conn, project_root);
@@ -3374,6 +3396,7 @@ State clearly: how many files resolved, one-line summary per file, whether all c
 /// is always a fast-forward. On conflict, invokes the conflict resolution
 /// agent to resolve automatically.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn pull_remote_before_publish(
     conn: &mut Connection,
     run_id: &str,
@@ -3382,6 +3405,7 @@ fn pull_remote_before_publish(
     cfg: &GroveConfig,
     model: Option<&str>,
     conv_branch: &str,
+    conversation_id: Option<&str>,
 ) -> GroveResult<()> {
     use crate::events::event_types;
     use crate::worktree::git_ops::{PullOutcome, git_pull_conv_branch};
@@ -3495,6 +3519,7 @@ fn pull_remote_before_publish(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
+                conversation_id: conversation_id.map(|s| s.to_string()),
             };
 
             let cr_result = provider.execute(&cr_request);

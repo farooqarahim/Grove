@@ -128,6 +128,7 @@ fn dequeue_next_graph(
         &workdir,
         queued.provider.as_deref(),
         None,
+        None,
     ) {
         Ok(p) => p,
         Err(e) => {
@@ -291,6 +292,7 @@ pub async fn create_graph_from_spec(
                 &workdir,
                 provider_override.as_deref().filter(|s| !s.is_empty()),
                 None,
+                None,
             )
             .map_err(|e| e.to_string())?;
 
@@ -441,6 +443,7 @@ pub async fn create_graph_simple(
                 &workdir,
                 provider_override.as_deref(),
                 None,
+                None,
             )
             .map_err(|e| e.to_string())?;
 
@@ -474,6 +477,7 @@ pub async fn create_graph_simple(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
+                conversation_id: None,
             };
 
             let _response = prov
@@ -634,7 +638,7 @@ pub async fn save_graph_document(
         let result: Result<(), String> = (|| {
             let cfg = grove_core::config::GroveConfig::load_or_create(&workdir)
                 .map_err(|e| e.to_string())?;
-            let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None)
+            let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
                 .map_err(|e| e.to_string())?;
 
             let rt = tokio::runtime::Handle::current();
@@ -730,7 +734,7 @@ pub async fn retry_document_generation(
             let cfg = grove_core::config::GroveConfig::load_or_create(&project_root)
                 .map_err(|e| e.to_string())?;
 
-            let prov = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None)
+            let prov = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
                 .map_err(|e| e.to_string())?;
 
             let skill_text = grove_core::grove_graph::skill_loader::load_skill(
@@ -762,6 +766,7 @@ pub async fn retry_document_generation(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
+                conversation_id: None,
             };
 
             let _response = prov
@@ -1432,7 +1437,7 @@ pub async fn start_graph_loop(
     // Build the provider for agent execution.
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None)
+    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
         .map_err(|e| e.to_string())?;
 
     // Set runtime_status to "running" BEFORE spawning the background thread.
@@ -1561,7 +1566,7 @@ pub async fn resume_graph(state: State<'_, AppState>, graph_id: String) -> Resul
     // Build the provider for agent execution.
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None)
+    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
         .map_err(|e| e.to_string())?;
 
     // Re-spawn the loop on a blocking thread.
@@ -1718,7 +1723,7 @@ pub async fn restart_graph(
     // Build the provider for agent execution.
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None)
+    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
         .map_err(|e| e.to_string())?;
 
     // Re-spawn the loop on a blocking thread.
@@ -1871,7 +1876,7 @@ pub async fn rerun_step(state: State<'_, AppState>, step_id: String) -> Result<(
 
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None)
+    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
         .map_err(|e| e.to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -1974,7 +1979,7 @@ pub async fn rerun_phase(state: State<'_, AppState>, phase_id: String) -> Result
 
     let cfg = grove_core::config::GroveConfig::load_or_create(&project_root)
         .map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &project_root, None, None)
+    let provider = grove_core::orchestrator::build_provider(&cfg, &project_root, None, None, None)
         .map_err(|e| e.to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {

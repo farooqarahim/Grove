@@ -12,6 +12,7 @@ interface DashboardScreenProps {
   onCreateProject: () => void;
   selectedProjectId?: string | null;
   onSelectConversation?: (id: string) => void;
+  onSelectProject?: (id: string) => void;
 }
 
 function projectDisplayName(p: ProjectRow): string {
@@ -22,7 +23,7 @@ function shortenPath(p: string): string {
   return p.replace(/^\/Users\/[^/]+/, "~");
 }
 
-export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId }: DashboardScreenProps) {
+export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, onNavigate, onSelectProject }: DashboardScreenProps) {
   const [showCreateIssue, setShowCreateIssue] = useState(false);
 
   const { data: workspace } = useQuery({
@@ -76,11 +77,14 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId }
             return (
               <div key={p.id}>
                 {i > 0 && <div style={s.divider} />}
-                <div
+                <button
                   className={isActive ? "proj-row proj-row--active" : "proj-row"}
+                  onClick={() => { onSelectProject?.(p.id); onNavigate("sessions"); }}
                   style={{
                     ...s.projectRow,
                     ...(isActive ? s.projectRowActive : {}),
+                    width: "100%", textAlign: "left", background: isActive ? "rgba(49,185,123,0.045)" : "transparent",
+                    border: "none", cursor: "pointer", fontFamily: "inherit",
                   }}
                 >
                   {isActive && <div style={s.activeBar} />}
@@ -93,7 +97,7 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId }
                     )}
                   </div>
                   <span style={s.projectPath}>{shortenPath(p.root_path)}</span>
-                </div>
+                </button>
               </div>
             );
           })

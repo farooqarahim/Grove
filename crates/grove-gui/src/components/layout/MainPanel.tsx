@@ -1,30 +1,33 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { StatusTag } from "@/components/ui/badge";
-import { Plus, Pulse, Gear, Layers } from "@/components/ui/icons";
-import { RunCard } from "@/components/runs/RunCard";
-import { RealTerminal } from "@/components/runs/RealTerminal";
-import { TerminalColumn } from "@/components/terminal";
 import { SessionSettingsModal } from "@/components/conversations/ConversationActions";
-import { ConversationThread } from "@/components/thread/ConversationThread";
 import { GraphPanel } from "@/components/grove-graph/GraphPanel";
+import { ProjectHome } from "@/components/layout/ProjectHome";
+import { RealTerminal } from "@/components/runs/RealTerminal";
+import { RunCard } from "@/components/runs/RunCard";
+import { ProjectSettingsPanel } from "@/components/settings/ProjectSettingsPanel";
+import { TerminalColumn } from "@/components/terminal";
+import { ConversationThread } from "@/components/thread/ConversationThread";
+import { StatusTag } from "@/components/ui/badge";
+import { Gear, Layers, Pulse, Sparkles } from "@/components/ui/icons";
+import { getConversation, listProjects, listRunsForConversation } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { getConversation, listRunsForConversation, listProjects } from "@/lib/api";
 import { C } from "@/lib/theme";
 import type { ProjectRow } from "@/types";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 interface MainPanelProps {
   conversationId: string | null;
   selectedProject: ProjectRow | null;
+  projectView?: "home" | "settings";
   onNewRun: () => void;
+  onSelectConversation?: (id: string) => void;
   // "Continue Task" on a finished run opens modal pre-wired to resume that specific run's thread.
   onContinueTask: (conversationId: string, runId: string) => void;
   onViewDiff?: (runId: string) => void;
 }
 
-export function MainPanel({ conversationId, selectedProject, onNewRun, onContinueTask, onViewDiff }: MainPanelProps) {
+export function MainPanel({ conversationId, selectedProject, projectView = "home", onNewRun, onSelectConversation, onContinueTask, onViewDiff }: MainPanelProps) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const [expandedAgentKey, setExpandedAgentKey] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [viewMode, setViewMode] = useState<"thread" | "cards">("cards");
 
@@ -134,6 +137,38 @@ export function MainPanel({ conversationId, selectedProject, onNewRun, onContinu
       );
     }
 
+    if (selectedProject) {
+      if (projectView === "settings") {
+        return (
+          <div style={{ flex: 1, overflowY: "auto", background: "#0e0f11", fontFamily: "'Geist', 'DM Sans', -apple-system, sans-serif" }}>
+            <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 28px 48px" }}>
+              <div style={{ marginBottom: 28 }}>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: "rgba(255,255,255,0.88)", margin: "0 0 4px", letterSpacing: "-0.02em" }}>
+                  Project Settings
+                </h1>
+                <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.28)", fontFamily: C.mono }}>
+                  {selectedProject.name ?? selectedProject.root_path.split("/").pop()}
+                </div>
+              </div>
+              <ProjectSettingsPanel
+                projectId={selectedProject.id}
+                projectName={selectedProject.name}
+                rootPath={selectedProject.root_path}
+              />
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <ProjectHome
+          project={selectedProject}
+          onNewRun={onNewRun}
+          onSelectConversation={onSelectConversation ?? (() => {})}
+        />
+      );
+    }
+
     return (
       <div
         className="h-full flex flex-col items-center justify-center gap-5"
@@ -146,19 +181,9 @@ export function MainPanel({ conversationId, selectedProject, onNewRun, onContinu
           <span className="text-xl font-black" style={{ color: `${C.accent}50` }}>G</span>
         </div>
         <div className="text-center">
-          <div className="text-lg font-medium mb-1" style={{ color: C.text3 }}>Select a session</div>
-          <div className="text-sm" style={{ color: C.text4 }}>or create a new session to get started</div>
+          <div className="text-lg font-medium mb-1" style={{ color: C.text3 }}>Select a project</div>
+          <div className="text-sm" style={{ color: C.text4 }}>Choose a project from the sidebar to get started</div>
         </div>
-        <button
-          onClick={onNewRun}
-          className="btn-accent flex items-center gap-1.5 text-sm font-semibold cursor-pointer"
-          style={{
-            padding: "8px 20px", borderRadius: 6,
-            background: C.accent, border: "none", color: "#fff",
-          }}
-        >
-          <Plus size={11} /> New Session
-        </button>
       </div>
     );
   }
@@ -409,13 +434,24 @@ export function MainPanel({ conversationId, selectedProject, onNewRun, onContinu
           )}
           <button
             onClick={onNewRun}
-            className="btn-accent flex items-center gap-1.5 text-xs font-medium cursor-pointer ml-1"
             style={{
-              padding: "6px 14px", borderRadius: 2,
-              background: C.accent, border: "none", color: "#fff",
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "6px 14px", borderRadius: 6, cursor: "pointer",
+              border: "1px solid rgba(62,207,142,0.24)",
+              background: "rgba(62,207,142,0.1)", color: C.accent,
+              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+              transition: "background 0.14s, border-color 0.14s",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(62,207,142,0.17)";
+              e.currentTarget.style.borderColor = "rgba(62,207,142,0.38)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(62,207,142,0.1)";
+              e.currentTarget.style.borderColor = "rgba(62,207,142,0.24)";
             }}
           >
-            <Plus size={12} /> + Create Run
+            <Sparkles size={12} /> New Run
           </button>
         </div>
       </div>
@@ -450,7 +486,7 @@ export function MainPanel({ conversationId, selectedProject, onNewRun, onContinu
           />
         </div>
       ) : (
-        <div className="smooth-scroll flex-1 overflow-y-auto">
+        <div className="smooth-scroll flex-1 overflow-y-auto" style={{ padding: "0 18px" }}>
           {/* Loading skeleton */}
           {!runs && (
             <div>
@@ -471,14 +507,16 @@ export function MainPanel({ conversationId, selectedProject, onNewRun, onContinu
               </div>
               <button
                 onClick={onNewRun}
-                className="btn-accent inline-flex items-center gap-1.5 text-sm font-semibold cursor-pointer"
                 style={{
-                  padding: "6px 14px", borderRadius: 4,
-                  background: C.accent, border: "none", color: "#fff",
-                  fontSize: 12,
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "8px 20px", borderRadius: 7, cursor: "pointer",
+                  border: "1px solid rgba(62,207,142,0.24)",
+                  background: "rgba(62,207,142,0.1)", color: C.accent,
+                  fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                  letterSpacing: "0.01em",
                 }}
               >
-                <Plus size={10} /> + Create Run
+                <Sparkles size={12} /> New Run
               </button>
             </div>
           )}
@@ -490,10 +528,7 @@ export function MainPanel({ conversationId, selectedProject, onNewRun, onContinu
               isExpanded={expandedRunId === run.id}
               onToggle={() => {
                 setExpandedRunId(expandedRunId === run.id ? null : run.id);
-                setExpandedAgentKey(null);
               }}
-              expandedAgentKey={expandedAgentKey}
-              onToggleAgent={setExpandedAgentKey}
               onContinueTask={onContinueTask}
               onViewDiff={onViewDiff}
             />

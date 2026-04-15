@@ -178,8 +178,9 @@ fn pool_exhaustion_size_one_second_checkout_errors() {
     db::initialize(dir.path()).unwrap();
     let db_path = db::db_path(dir.path());
 
-    // Use a 100 ms timeout so the test completes quickly.
-    let pool = DbPool::new(&db_path, 1, 100).expect("pool creation must succeed");
+    // Use a 1 s timeout: long enough for lazy connection establishment under
+    // parallel test load, still short enough for exhaustion to surface quickly.
+    let pool = DbPool::new(&db_path, 1, 1000).expect("pool creation must succeed");
 
     // Hold the one available connection for the duration of the test.
     let _held = pool.get().expect("first checkout must succeed");
@@ -205,8 +206,9 @@ fn pool_exhaustion_size_two_third_checkout_errors() {
     db::initialize(dir.path()).unwrap();
     let db_path = db::db_path(dir.path());
 
-    // Use a 100 ms timeout so the test completes quickly.
-    let pool = DbPool::new(&db_path, 2, 100).expect("pool creation must succeed");
+    // Use a 1 s timeout: long enough for lazy connection establishment under
+    // parallel test load, still short enough for exhaustion to surface quickly.
+    let pool = DbPool::new(&db_path, 2, 1000).expect("pool creation must succeed");
 
     let _conn1 = pool.get().expect("first checkout must succeed");
     let _conn2 = pool.get().expect("second checkout must succeed");

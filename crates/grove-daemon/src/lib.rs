@@ -5,6 +5,7 @@ pub mod lifecycle;
 pub mod queue_drain;
 pub mod rpc;
 pub mod server;
+pub mod session_host;
 
 use anyhow::Result;
 

@@ -50,12 +50,13 @@ impl DbPool {
     pub fn new(db_path: &Path, max_size: u32, timeout_ms: u64) -> GroveResult<Self> {
         let manager = SqliteConnectionManager::file(db_path);
 
-        // min_idle must not exceed max_size; cap at max_size.
-        let min_idle = 2_u32.min(max_size);
-
+        // Build lazily (min_idle = 0) so pool construction does not block
+        // on establishing SQLite connections. Under parallel-test load the
+        // eager `min_idle=2` path could exceed tight `connection_timeout`
+        // values; connections are now established on demand at `.get()`.
         let pool = Pool::builder()
             .max_size(max_size)
-            .min_idle(Some(min_idle))
+            .min_idle(Some(0))
             .connection_timeout(Duration::from_millis(timeout_ms))
             .idle_timeout(Some(Duration::from_secs(300)))
             .connection_customizer(Box::new(PragmaInitializer))

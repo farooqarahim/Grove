@@ -50,7 +50,7 @@ bstr = "1"
 globset = "0.4"
 r2d2 = "0.8"
 r2d2_sqlite = "0.25"
-tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "process", "io-util"] }
 cron = "0.13"
 axum = "0.8"
 tower = "0.5"

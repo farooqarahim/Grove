@@ -78,6 +78,8 @@ struct StartRunParams {
     permission_mode: Option<String>,
     #[serde(default)]
     conversation_id: Option<String>,
+    #[serde(default)]
+    continue_last: bool,
 }
 
 pub async fn start_run(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcError> {
@@ -89,6 +91,7 @@ pub async fn start_run(ctx: &DispatchCtx, params: Value) -> Result<Value, RpcErr
         model: p.model,
         permission_mode: p.permission_mode,
         conversation_id: p.conversation_id,
+        continue_last: p.continue_last,
     };
     let out = tokio::task::spawn_blocking(move || grove_core::facade::start_run(&root, input))
         .await

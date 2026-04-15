@@ -11,8 +11,17 @@ use crate::worktree::merge::ConflictRecord;
 /// Resolve the effective conflict strategy, degrading `Pause` to `Fail` in
 /// non-TTY environments to prevent hanging in CI.
 pub fn effective_strategy(configured: ConflictStrategy) -> ConflictStrategy {
+    effective_strategy_with_tty(configured, io::stdin().is_terminal())
+}
+
+/// Pure-logic variant of [`effective_strategy`] that takes an explicit
+/// `is_tty` flag — testable without depending on the runtime environment.
+pub fn effective_strategy_with_tty(
+    configured: ConflictStrategy,
+    is_tty: bool,
+) -> ConflictStrategy {
     match configured {
-        ConflictStrategy::Pause if !io::stdin().is_terminal() => {
+        ConflictStrategy::Pause if !is_tty => {
             tracing::warn!(
                 "conflict_strategy is 'pause' but stdin is not a TTY — \
                  degrading to 'fail' to prevent hanging in CI"

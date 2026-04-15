@@ -135,6 +135,7 @@ pub fn dispatch_worker(
         grove_session_id: Some(session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_path,
+        conversation_id: None,
     };
 
     let outcome = match provider.execute(&request) {

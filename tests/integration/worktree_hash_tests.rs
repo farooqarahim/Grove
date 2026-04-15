@@ -1524,11 +1524,11 @@ fn resolve_nonexistent_conflict_returns_false() {
 #[test]
 fn effective_strategy_non_tty_degrades_pause() {
     use grove_core::config::ConflictStrategy;
-    use grove_core::worktree::conflict_ui::effective_strategy;
+    use grove_core::worktree::conflict_ui::effective_strategy_with_tty;
 
-    // In test runner, stdin is typically not a TTY.
-    let result = effective_strategy(ConflictStrategy::Pause);
-    // When running in a non-TTY test env, Pause should degrade to Fail.
+    // Use the TTY-parametrized variant so the assertion is deterministic
+    // regardless of how `cargo test` is invoked (interactive shell vs CI).
+    let result = effective_strategy_with_tty(ConflictStrategy::Pause, false);
     assert_eq!(result, ConflictStrategy::Fail);
 }
 
