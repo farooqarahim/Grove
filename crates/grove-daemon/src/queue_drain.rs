@@ -182,6 +182,7 @@ fn execute_one(cfg: &DaemonConfig, task: TaskRecord) {
         &project_root,
         task.provider.as_deref(),
         perm.clone(),
+        None,
     ) {
         Ok(p) => p,
         Err(e) => {
@@ -220,6 +221,7 @@ fn execute_one(cfg: &DaemonConfig, task: TaskRecord) {
         on_run_created: None,
         input_handle_callback: None,
         run_control_callback: None,
+        session_host_registry: None,
     };
 
     info!(task_id = %task.id, objective = %task.objective, "executing queued task");

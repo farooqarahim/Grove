@@ -62,6 +62,7 @@ fn test_options() -> RunOptions {
         resume_provider_session_id: None,
         input_handle_callback: None,
         run_control_callback: None,
+        session_host_registry: None,
     }
 }
 

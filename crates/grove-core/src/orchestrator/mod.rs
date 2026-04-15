@@ -179,6 +179,11 @@ pub struct RunOptions {
                 + Sync,
         >,
     >,
+    /// Session host registry for warm-path Claude Code routing.
+    /// When `Some`, `build_provider` threads it into `ClaudeCodeProvider` via
+    /// `.with_session_registry(...)`. Remains `None` everywhere until the daemon
+    /// wires the real registry in Task 11.
+    pub session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
 }
 
 impl std::fmt::Debug for RunOptions {
@@ -213,6 +218,10 @@ impl std::fmt::Debug for RunOptions {
             .field(
                 "run_control_callback",
                 &self.run_control_callback.as_ref().map(|_| "<callback>"),
+            )
+            .field(
+                "session_host_registry",
+                &self.session_host_registry.as_ref().map(|_| "<registry>"),
             )
             .finish()
     }
@@ -407,6 +416,7 @@ pub fn build_provider(
     project_root: &Path,
     provider_override: Option<&str>,
     permission_override: Option<PermissionMode>,
+    session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
 ) -> crate::errors::GroveResult<Arc<dyn Provider>> {
     use crate::errors::GroveError;
     use crate::llm::{LlmAuthMode, LlmProviderKind, LlmRouter};
@@ -436,9 +446,8 @@ pub fn build_provider(
         .with_resource_limits(
             cfg.providers.claude_code.max_file_size_mb,
             cfg.providers.claude_code.max_open_files,
-        );
-        // TODO(B1 Task 9): thread session registry via .with_session_registry(...) once
-        // RunOptions carries it. Until then, ClaudeCodeProvider stays on cold-spawn.
+        )
+        .with_session_registry(session_host_registry);
         // Always wrap Claude Code with the persistent provider — persistent
         // mode is now the default execution path for all agents.
         return Ok(Arc::new(ClaudeCodePersistentProvider::new(
