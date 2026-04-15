@@ -155,7 +155,7 @@ async fn drain_all(
         tokio::spawn(async move {
             let _permit = permit; // held for the task's lifetime
             let join = tokio::task::spawn_blocking(move || {
-                execute_one(&cfg_for_exec, task, Some(registry_for_task))
+                execute_one(&cfg_for_exec, task, registry_for_task)
             })
             .await;
             if let Err(join_err) = join {
@@ -172,11 +172,7 @@ async fn drain_all(
 /// Failure modes are logged and the task is marked `failed` in the DB so the
 /// queue never sticks on a poisoned task. Returns `()` unconditionally —
 /// drain_all only distinguishes panics from ordinary failures.
-fn execute_one(
-    cfg: &DaemonConfig,
-    task: TaskRecord,
-    registry: Option<Arc<dyn SessionHostRegistry>>,
-) {
+fn execute_one(cfg: &DaemonConfig, task: TaskRecord, registry: Arc<dyn SessionHostRegistry>) {
     let workspace_root = cfg.project_root.clone();
     let project_root = orchestrator::resolve_project_root_for_task(&workspace_root, &task);
 
@@ -197,7 +193,7 @@ fn execute_one(
         &project_root,
         task.provider.as_deref(),
         perm.clone(),
-        registry.clone(),
+        Some(registry.clone()),
     ) {
         Ok(p) => p,
         Err(e) => {
@@ -236,7 +232,7 @@ fn execute_one(
         on_run_created: None,
         input_handle_callback: None,
         run_control_callback: None,
-        session_host_registry: registry.clone(),
+        session_host_registry: Some(registry.clone()),
     };
 
     info!(task_id = %task.id, objective = %task.objective, "executing queued task");
