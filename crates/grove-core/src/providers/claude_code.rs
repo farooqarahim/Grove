@@ -229,31 +229,36 @@ impl ClaudeCodeProvider {
         let cwd = PathBuf::from(&request.worktree_path);
         let reg = Arc::clone(reg);
 
-        let outcome = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let host = reg
-                    .get_or_spawn(
-                        key,
-                        resume,
-                        Box::new(move |sid: Option<&str>| {
-                            let sid_owned = sid.map(|s| s.to_string());
-                            let command = command.clone();
-                            let cwd = cwd.clone();
-                            Box::pin(async move {
-                                ClaudeSessionHost::spawn(
-                                    std::path::Path::new(&command),
-                                    &cwd,
-                                    sid_owned.as_deref(),
-                                )
-                                .await
-                            })
-                        }),
-                    )
-                    .await?;
-                host.send_turn(&prompt).await
-            })
+        let handle = tokio::runtime::Handle::try_current().map_err(|_| {
+            GroveError::Runtime(
+                "session-registry warm path requires an active Tokio runtime".into(),
+            )
         })?;
+        let outcome = tokio::task::block_in_place(|| handle.block_on(async move {
+            let host = reg
+                .get_or_spawn(
+                    key,
+                    resume,
+                    Box::new(move |sid: Option<&str>| {
+                        let sid_owned = sid.map(|s| s.to_string());
+                        let command = command.clone();
+                        let cwd = cwd.clone();
+                        Box::pin(async move {
+                            ClaudeSessionHost::spawn(
+                                std::path::Path::new(&command),
+                                &cwd,
+                                sid_owned.as_deref(),
+                            )
+                            .await
+                        })
+                    }),
+                )
+                .await?;
+            host.send_turn(&prompt).await
+        }))?;
 
+        // NOTE: warm path emits all events post-turn; streaming granularity is turn-level,
+        // not token-level (a consequence of ClaudeSessionHost::send_turn buffering events).
         // Emit individual turn events through the sink.
         let mut summary_parts: Vec<String> = Vec::new();
         for ev in &outcome.events {
@@ -291,10 +296,12 @@ impl ClaudeCodeProvider {
 
         Ok(ProviderResponse {
             summary,
+            // changed_files: not populated on the warm path; callers needing file-level
+            // change info recompute via git_ops::changed_files_since (as scope enforcement does).
             changed_files: vec![],
             cost_usd: Some(outcome.cost_usd),
             provider_session_id: outcome.session_id,
-            pid: None,
+            pid: None, // TODO(B1): surface persistent host PID once TurnOutcome carries it (see Task 9 prep)
         })
     }
 }

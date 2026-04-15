@@ -437,6 +437,8 @@ pub fn build_provider(
             cfg.providers.claude_code.max_file_size_mb,
             cfg.providers.claude_code.max_open_files,
         );
+        // TODO(B1 Task 9): thread session registry via .with_session_registry(...) once
+        // RunOptions carries it. Until then, ClaudeCodeProvider stays on cold-spawn.
         // Always wrap Claude Code with the persistent provider — persistent
         // mode is now the default execution path for all agents.
         return Ok(Arc::new(ClaudeCodePersistentProvider::new(
