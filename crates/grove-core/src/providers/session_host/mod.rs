@@ -31,6 +31,7 @@ impl SessionKey {
 
 pub mod host;
 pub mod protocol;
+pub mod registry;
 
 /// Abstraction so the orchestrator can be compiled and tested without a
 /// registry (Direct transport passes `None`; daemon passes `Some`).
