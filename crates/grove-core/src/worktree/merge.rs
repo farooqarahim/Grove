@@ -891,6 +891,7 @@ fn resolve_with_ai(
         grove_session_id: None,
         input_handle_callback: None,
         mcp_config_path: None,
+        conversation_id: None,
     };
 
     let response = provider

@@ -127,6 +127,7 @@ async fn spawn_preplanner_agent(
         grove_session_id: None,
         input_handle_callback: None,
         mcp_config_path: mcp_config_path.map(|p| p.to_string_lossy().to_string()),
+        conversation_id: None,
     };
 
     let response = provider.execute(&request)?;
@@ -421,6 +422,7 @@ async fn spawn_graph_json_planner(
         grove_session_id: None,
         input_handle_callback: None,
         mcp_config_path: None, // no MCP — eliminates all tool-call overhead
+        conversation_id: None,
     };
 
     let response = provider.execute(&request)?;

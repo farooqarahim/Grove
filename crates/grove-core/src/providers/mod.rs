@@ -170,6 +170,11 @@ pub struct ProviderRequest {
     /// CLI arguments. Used for graph agents that need grove-mcp-server tools.
     #[serde(default)]
     pub mcp_config_path: Option<String>,
+    /// Grove conversation ID used to key persistent session registry lookups.
+    /// `None` means this request cannot be routed through a warm persistent
+    /// host (falls back to cold-spawn). Threaded through by Task 9.
+    #[serde(default)]
+    pub conversation_id: Option<String>,
 }
 
 impl std::fmt::Debug for ProviderRequest {
@@ -190,6 +195,7 @@ impl std::fmt::Debug for ProviderRequest {
                 &self.input_handle_callback.as_ref().map(|_| "<callback>"),
             )
             .field("mcp_config_path", &self.mcp_config_path)
+            .field("conversation_id", &self.conversation_id)
             .finish()
     }
 }

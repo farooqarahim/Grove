@@ -126,6 +126,7 @@ impl PersistentPhaseProvider for RecordingProvider {
             grove_session_id: Some(grove_session_id.to_string()),
             input_handle_callback: None,
             mcp_config_path: host.mcp_config_path.clone(),
+            conversation_id: None,
         };
 
         // Record the session id for the test assertion.

@@ -474,6 +474,7 @@ pub async fn create_graph_simple(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
+                conversation_id: None,
             };
 
             let _response = prov
@@ -762,6 +763,7 @@ pub async fn retry_document_generation(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
+                conversation_id: None,
             };
 
             let _response = prov

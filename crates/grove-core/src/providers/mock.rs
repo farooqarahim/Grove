@@ -121,6 +121,7 @@ impl PersistentPhaseProvider for MockProvider {
             grove_session_id: Some(grove_session_id.to_string()),
             input_handle_callback: None,
             mcp_config_path: host.mcp_config_path.clone(),
+            conversation_id: None,
         };
         let response = self.execute(&request)?;
         if let Some(c) = response.cost_usd {

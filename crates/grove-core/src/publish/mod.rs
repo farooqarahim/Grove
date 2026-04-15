@@ -911,6 +911,7 @@ fn push_with_recovery(
             grove_session_id: None,
             input_handle_callback: None,
             mcp_config_path: None,
+            conversation_id: None,
         };
 
         let agent_result = prov.execute(&request);

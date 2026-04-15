@@ -504,6 +504,7 @@ fn run_agents_inner(
                                         grove_session_id: None,
                                         input_handle_callback: None,
                                         mcp_config_path: None,
+                                        conversation_id: None,
                                     };
 
                                     let cr_result = provider.execute(&cr_request);
@@ -2671,6 +2672,7 @@ fn run_task_wave(
             grove_session_id: None,
             input_handle_callback: None,
             mcp_config_path: None,
+            conversation_id: None,
         };
 
         let hb_db_path = resolve_db_path(conn, project_root);
@@ -3508,6 +3510,7 @@ fn pull_remote_before_publish(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
+                conversation_id: None,
             };
 
             let cr_result = provider.execute(&cr_request);

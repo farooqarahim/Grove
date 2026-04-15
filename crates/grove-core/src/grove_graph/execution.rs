@@ -230,6 +230,7 @@ async fn spawn_builder_agent(
         grove_session_id: Some(session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_config_path.map(|p| p.to_string_lossy().to_string()),
+        conversation_id: None,
     };
 
     let response = provider.execute(&request)?;
@@ -351,6 +352,7 @@ async fn spawn_fixer_agent(
         grove_session_id: Some(session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_config_path.map(|p| p.to_string_lossy().to_string()),
+        conversation_id: None,
     };
 
     let response = provider.execute(&request)?;
@@ -655,6 +657,7 @@ async fn spawn_phase_validator(
         grove_session_id: Some(validator_session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_config_path.map(|p| p.to_string_lossy().to_string()),
+        conversation_id: None,
     };
 
     let response = provider.execute(&request)?;
@@ -780,6 +783,7 @@ async fn spawn_phase_judge(
         grove_session_id: Some(judge_session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_config_path.map(|p| p.to_string_lossy().to_string()),
+        conversation_id: None,
     };
 
     let response = provider.execute(&request)?;
