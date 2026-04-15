@@ -1,4 +1,5 @@
 pub mod automations_repo;
+pub mod conversations_lru;
 pub mod chatter_threads_repo;
 pub mod checkpoints_repo;
 pub mod conversations_repo;
