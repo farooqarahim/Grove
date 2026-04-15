@@ -5,7 +5,10 @@
 //! provider sees a registry, it reuses an existing host instead of cold-
 //! spawning `claude -p`.
 
+use crate::errors::GroveResult;
+use host::ClaudeSessionHost;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Identity of a persistent Claude session. Two turns belong to the same
 /// host iff both fields match exactly. We key on `work_dir` because Grove
@@ -28,6 +31,38 @@ impl SessionKey {
 
 pub mod host;
 pub mod protocol;
+
+/// Abstraction so the orchestrator can be compiled and tested without a
+/// registry (Direct transport passes `None`; daemon passes `Some`).
+#[allow(clippy::len_without_is_empty)]
+#[async_trait::async_trait]
+pub trait SessionHostRegistry: Send + Sync {
+    /// Return an existing host for `key`, or spawn one via `spawn_fn` and
+    /// register it. The closure receives the optional resume session id so
+    /// callers can plumb `--session-id` through.
+    async fn get_or_spawn(
+        &self,
+        key: SessionKey,
+        resume_session_id: Option<String>,
+        spawn_fn: Box<
+            dyn for<'a> FnOnce(
+                    Option<&'a str>,
+                ) -> futures::future::BoxFuture<
+                    'a,
+                    GroveResult<Arc<ClaudeSessionHost>>,
+                > + Send,
+        >,
+    ) -> GroveResult<Arc<ClaudeSessionHost>>;
+
+    /// Explicitly evict and shut down the host for `key`, if present.
+    async fn evict(&self, key: &SessionKey);
+
+    /// Current size — for metrics and tests.
+    async fn len(&self) -> usize;
+
+    /// Erased self for downcast in daemon-side idle-sweep code path.
+    fn as_any(&self) -> &dyn std::any::Any;
+}
 
 #[cfg(test)]
 mod tests {
