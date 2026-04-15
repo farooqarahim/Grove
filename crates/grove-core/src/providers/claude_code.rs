@@ -15,7 +15,7 @@ use super::session_host::{SessionHostRegistry, SessionKey};
 use super::stream_parser::{self, StreamEvent, StreamResult};
 use super::timeout;
 use super::{
-    Provider, ProviderRequest, ProviderResponse, QaSource, SessionContinuityPolicy,
+    NullSink, Provider, ProviderRequest, ProviderResponse, QaSource, SessionContinuityPolicy,
     StreamOutputEvent, StreamSink,
 };
 
@@ -165,8 +165,13 @@ impl ClaudeCodeProvider {
         allowed_tools: Vec<String>,
         gatekeeper_model: Option<String>,
     ) -> Self {
+        // `GROVE_CLAUDE_BIN` is an integration-test affordance that lets
+        // tests point the provider at a fake shell script without writing
+        // a full grove config. Honored in all code paths (cold + warm)
+        // because the env var is read exactly once, here, at construction.
+        let command = std::env::var("GROVE_CLAUDE_BIN").unwrap_or_else(|_| command.into());
         Self {
-            command: command.into(),
+            command,
             timeout_secs,
             permission_mode,
             allowed_tools,
@@ -324,6 +329,20 @@ impl Provider for ClaudeCodeProvider {
     }
 
     fn execute(&self, request: &ProviderRequest) -> GroveResult<ProviderResponse> {
+        // Warm path: same three conditions as execute_streaming — when a
+        // registry is attached, the request carries a conversation_id, and
+        // the mode is SkipAll, reuse the persistent host. Non-streaming
+        // callers get a NullSink (events are still buffered into the
+        // ProviderResponse summary by execute_streaming_warm).
+        if self.permission_mode == PermissionMode::SkipAll {
+            if let (Some(reg), Some(conv_id)) =
+                (&self.session_registry, &request.conversation_id)
+            {
+                let sink = NullSink;
+                return self.execute_streaming_warm(request, &sink, reg, conv_id);
+            }
+        }
+
         // Fast path: skip all permission checks.
         if self.permission_mode == PermissionMode::SkipAll {
             return self.run_once(request, None);

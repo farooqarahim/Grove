@@ -504,7 +504,7 @@ fn run_agents_inner(
                                         grove_session_id: None,
                                         input_handle_callback: None,
                                         mcp_config_path: None,
-                                        conversation_id: None,
+                                        conversation_id: conversation_id.map(|s| s.to_string()),
                                     };
 
                                     let cr_result = provider.execute(&cr_request);
@@ -813,6 +813,7 @@ fn run_agents_inner(
                 cfg,
                 model,
                 cb,
+                conversation_id,
             ) {
                 tracing::warn!(
                     error = %e,
@@ -1046,6 +1047,7 @@ fn run_agents_persistent(
                     project_root,
                     project_configs,
                     run_artifacts_dir,
+                    conversation_id,
                 )?;
             }
             resume_held = false; // decomposition consumed stage 0; next stage's agents get a fresh session
@@ -2539,6 +2541,7 @@ fn wait_for_persistent_gate_decision(
 /// Run all waves of decomposed sub-tasks produced by the architect.
 /// Each wave's tasks run in parallel (bounded by `max_agents`); waves are sequential.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn run_task_waves(
     conn: &mut Connection,
     run_id: &str,
@@ -2556,6 +2559,7 @@ fn run_task_waves(
     project_root: &Path,
     project_configs: Option<&crate::config::agent_config::ProjectConfigs>,
     run_artifacts_dir: &Path,
+    conversation_id: Option<&str>,
 ) -> GroveResult<()> {
     let waves = task_decomposer::compute_waves(&decomp.tasks)?;
     let total_waves = waves.len();
@@ -2588,6 +2592,7 @@ fn run_task_waves(
                 project_root,
                 project_configs,
                 run_artifacts_dir,
+                conversation_id,
             )?;
         }
     }
@@ -2596,6 +2601,7 @@ fn run_task_waves(
 }
 
 /// Run a single wave of tasks sequentially on the shared worktree.
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn run_task_wave(
     conn: &mut Connection,
@@ -2613,6 +2619,7 @@ fn run_task_wave(
     project_root: &Path,
     project_configs: Option<&crate::config::agent_config::ProjectConfigs>,
     artifacts_dir: &Path,
+    conversation_id: Option<&str>,
 ) -> GroveResult<()> {
     // All tasks run sequentially on the shared worktree — no parallel forks.
     for task in wave_tasks {
@@ -2672,7 +2679,7 @@ fn run_task_wave(
             grove_session_id: None,
             input_handle_callback: None,
             mcp_config_path: None,
-            conversation_id: None,
+            conversation_id: conversation_id.map(|s| s.to_string()),
         };
 
         let hb_db_path = resolve_db_path(conn, project_root);
@@ -3389,6 +3396,7 @@ State clearly: how many files resolved, one-line summary per file, whether all c
 /// is always a fast-forward. On conflict, invokes the conflict resolution
 /// agent to resolve automatically.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn pull_remote_before_publish(
     conn: &mut Connection,
     run_id: &str,
@@ -3397,6 +3405,7 @@ fn pull_remote_before_publish(
     cfg: &GroveConfig,
     model: Option<&str>,
     conv_branch: &str,
+    conversation_id: Option<&str>,
 ) -> GroveResult<()> {
     use crate::events::event_types;
     use crate::worktree::git_ops::{PullOutcome, git_pull_conv_branch};
@@ -3510,7 +3519,7 @@ fn pull_remote_before_publish(
                 grove_session_id: None,
                 input_handle_callback: None,
                 mcp_config_path: None,
-                conversation_id: None,
+                conversation_id: conversation_id.map(|s| s.to_string()),
             };
 
             let cr_result = provider.execute(&cr_request);
