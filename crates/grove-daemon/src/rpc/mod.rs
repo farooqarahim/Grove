@@ -20,6 +20,7 @@ pub mod worktrees;
 use crate::config::DaemonConfig;
 use crate::queue_drain::DrainSignal;
 use envelope::{RpcError, RpcRequest, RpcResponse};
+use grove_core::providers::session_host::SessionHostRegistry;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -28,14 +29,20 @@ pub struct DispatchCtx {
     pub cfg: Arc<DaemonConfig>,
     pub started_at: Instant,
     pub drain_signal: DrainSignal,
+    pub session_registry: Arc<dyn SessionHostRegistry>,
 }
 
 impl DispatchCtx {
-    pub fn new(cfg: DaemonConfig, drain_signal: DrainSignal) -> Self {
+    pub fn new(
+        cfg: DaemonConfig,
+        drain_signal: DrainSignal,
+        session_registry: Arc<dyn SessionHostRegistry>,
+    ) -> Self {
         Self {
             cfg: Arc::new(cfg),
             started_at: Instant::now(),
             drain_signal,
+            session_registry,
         }
     }
 }

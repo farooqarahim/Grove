@@ -3,12 +3,14 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
 use crate::config::DaemonConfig;
 use crate::queue_drain::{self, DrainShutdown, DrainSignal};
 use crate::rpc::envelope::{RpcError, RpcRequest, RpcResponse};
 use crate::rpc::{DispatchCtx, dispatch};
+use crate::session_host::{build_registry, run_idle_sweep};
 
 pub async fn serve(cfg: DaemonConfig) -> Result<()> {
     let _pid_guard = crate::lifecycle::pidfile::PidGuard::acquire(&cfg.pid_path)?;
@@ -31,17 +33,27 @@ pub async fn serve(cfg: DaemonConfig) -> Result<()> {
 
     let drain_signal = DrainSignal::new();
     let drain_shutdown = DrainShutdown::new();
+
+    let session_registry = build_registry(cfg.session_idle_secs, cfg.max_sessions);
+    let sweep_shutdown = Arc::new(Notify::new());
+    let sweep_handle = tokio::spawn(run_idle_sweep(
+        session_registry.clone(),
+        cfg.session_idle_secs,
+        sweep_shutdown.clone(),
+    ));
+
     let drain_cfg = cfg.clone();
     let drain_handle = tokio::spawn(queue_drain::run(
         drain_cfg,
         drain_signal.clone(),
         drain_shutdown.clone(),
+        session_registry.clone(),
     ));
     // Kick the drain once at startup so any tasks enqueued while the daemon
     // was offline are picked up immediately rather than waiting a full tick.
     drain_signal.notify();
 
-    let ctx = Arc::new(DispatchCtx::new(cfg, drain_signal));
+    let ctx = Arc::new(DispatchCtx::new(cfg, drain_signal, session_registry));
 
     let mut sigterm = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
     let mut sigint = signal(SignalKind::interrupt()).context("install SIGINT handler")?;
@@ -77,6 +89,11 @@ pub async fn serve(cfg: DaemonConfig) -> Result<()> {
     drain_shutdown.shutdown();
     if let Err(e) = drain_handle.await {
         warn!(error = %e, "drain loop join error");
+    }
+
+    sweep_shutdown.notify_waiters();
+    if let Err(e) = sweep_handle.await {
+        warn!(error = %e, "idle sweep join error");
     }
 
     let _ = std::fs::remove_file(&ctx.cfg.socket_path);

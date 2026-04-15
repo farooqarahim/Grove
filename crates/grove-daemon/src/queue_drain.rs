@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use grove_core::config::{self, GroveConfig};
 use grove_core::orchestrator::{self, RunOptions, TaskRecord};
+use grove_core::providers::session_host::SessionHostRegistry;
 use tokio::sync::{Notify, Semaphore};
 use tracing::{error, info, warn};
 
@@ -82,7 +83,12 @@ impl DrainShutdown {
 /// immediately to pick up the next queued task, rather than waiting up to
 /// the 1s poll interval. This is the mechanism that keeps concurrency
 /// fully utilized.
-pub async fn run(cfg: DaemonConfig, signal: DrainSignal, shutdown: DrainShutdown) {
+pub async fn run(
+    cfg: DaemonConfig,
+    signal: DrainSignal,
+    shutdown: DrainShutdown,
+    registry: Arc<dyn SessionHostRegistry>,
+) {
     info!(
         max_concurrent = cfg.max_concurrent_tasks,
         "queue drain loop started"
@@ -98,7 +104,7 @@ pub async fn run(cfg: DaemonConfig, signal: DrainSignal, shutdown: DrainShutdown
             _ = tokio::time::sleep(Duration::from_millis(1000)) => {}
         }
 
-        if let Err(e) = drain_all(&cfg, &sem, &signal).await {
+        if let Err(e) = drain_all(&cfg, &sem, &signal, &registry).await {
             error!(error = %e, "drain cycle failed");
         }
     }
@@ -117,6 +123,7 @@ async fn drain_all(
     cfg: &DaemonConfig,
     sem: &Arc<Semaphore>,
     signal: &DrainSignal,
+    registry: &Arc<dyn SessionHostRegistry>,
 ) -> anyhow::Result<()> {
     loop {
         // Acquire concurrency slot first; if the pool is full, yield to the
@@ -142,11 +149,15 @@ async fn drain_all(
 
         let cfg_for_exec = cfg.clone();
         let signal_for_wake = signal.clone();
+        let registry_for_task = registry.clone();
         // Detach: we do NOT await the spawn. The permit lives on the spawned
         // task and is released when the task completes (or panics).
         tokio::spawn(async move {
             let _permit = permit; // held for the task's lifetime
-            let join = tokio::task::spawn_blocking(move || execute_one(&cfg_for_exec, task)).await;
+            let join = tokio::task::spawn_blocking(move || {
+                execute_one(&cfg_for_exec, task, Some(registry_for_task))
+            })
+            .await;
             if let Err(join_err) = join {
                 error!(error = %join_err, "queued task panicked");
             }
@@ -161,7 +172,11 @@ async fn drain_all(
 /// Failure modes are logged and the task is marked `failed` in the DB so the
 /// queue never sticks on a poisoned task. Returns `()` unconditionally —
 /// drain_all only distinguishes panics from ordinary failures.
-fn execute_one(cfg: &DaemonConfig, task: TaskRecord) {
+fn execute_one(
+    cfg: &DaemonConfig,
+    task: TaskRecord,
+    registry: Option<Arc<dyn SessionHostRegistry>>,
+) {
     let workspace_root = cfg.project_root.clone();
     let project_root = orchestrator::resolve_project_root_for_task(&workspace_root, &task);
 
@@ -182,7 +197,7 @@ fn execute_one(cfg: &DaemonConfig, task: TaskRecord) {
         &project_root,
         task.provider.as_deref(),
         perm.clone(),
-        None,
+        registry.clone(),
     ) {
         Ok(p) => p,
         Err(e) => {
@@ -221,7 +236,7 @@ fn execute_one(cfg: &DaemonConfig, task: TaskRecord) {
         on_run_created: None,
         input_handle_callback: None,
         run_control_callback: None,
-        session_host_registry: None,
+        session_host_registry: registry.clone(),
     };
 
     info!(task_id = %task.id, objective = %task.objective, "executing queued task");
@@ -273,8 +288,9 @@ mod tests {
         let signal = DrainSignal::new();
         let shutdown = DrainShutdown::new();
         let s2 = shutdown.clone();
+        let registry = crate::session_host::build_registry(900, 8);
         let handle = tokio::spawn(async move {
-            run(cfg, signal, shutdown).await;
+            run(cfg, signal, shutdown, registry).await;
         });
         // Give the loop a moment to enter its select.
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -312,7 +328,8 @@ mod tests {
         let cfg = test_cfg();
         let sem = Arc::new(Semaphore::new(cfg.max_concurrent_tasks));
         let signal = DrainSignal::new();
-        let res = drain_all(&cfg, &sem, &signal).await;
+        let registry = crate::session_host::build_registry(900, 8);
+        let res = drain_all(&cfg, &sem, &signal, &registry).await;
         // The task table does not exist on a bare tempdir, so we expect an
         // error from the DB layer. The important contract is that drain_all
         // returns rather than hanging — the surrounding loop logs and continues.
@@ -332,9 +349,13 @@ mod tests {
         // Pre-acquire the only permit to simulate "pool full".
         let _blocker = sem.clone().try_acquire_owned().expect("permit");
         let signal = DrainSignal::new();
-        let res = tokio::time::timeout(Duration::from_millis(100), drain_all(&cfg, &sem, &signal))
-            .await
-            .expect("drain_all must not hang when pool is full");
+        let registry = crate::session_host::build_registry(900, 8);
+        let res = tokio::time::timeout(
+            Duration::from_millis(100),
+            drain_all(&cfg, &sem, &signal, &registry),
+        )
+        .await
+        .expect("drain_all must not hang when pool is full");
         assert!(
             res.is_ok(),
             "saturated pool is expected behavior, not an error"
