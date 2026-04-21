@@ -2,9 +2,16 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NewIssueModal } from "@/components/modals/NewIssueModal";
 import { GroveLogo } from "@/components/ui/GroveLogo";
-import { getWorkspace, listProjects } from "@/lib/api";
+import {
+  getWorkspace,
+  issueCountOpen,
+  listAutomations,
+  listConversations,
+  listProjects,
+  listRuns,
+} from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import type { NavScreen, ProjectRow } from "@/types";
+import type { ConversationRow, NavScreen, ProjectRow } from "@/types";
 
 interface DashboardScreenProps {
   onNavigate: (screen: NavScreen) => void;
@@ -23,7 +30,41 @@ function shortenPath(p: string): string {
   return p.replace(/^\/Users\/[^/]+/, "~");
 }
 
-export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, onNavigate, onSelectProject }: DashboardScreenProps) {
+function conversationDisplayName(c: ConversationRow): string {
+  return c.title?.trim() || `session ${c.id.slice(0, 8)}`;
+}
+
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  return d.toLocaleDateString();
+}
+
+// A "completed" run whose changes haven't been published/committed/skipped.
+// Awaiting-review = user has something to look at and act on.
+function isAwaitingReview(state: string, publishStatus: string | null): boolean {
+  if (state !== "completed") return false;
+  return !publishStatus || publishStatus === "";
+}
+
+export function DashboardScreen({
+  onNewRun,
+  onCreateProject,
+  selectedProjectId,
+  onNavigate,
+  onSelectProject,
+  onSelectConversation,
+}: DashboardScreenProps) {
   const [showCreateIssue, setShowCreateIssue] = useState(false);
 
   const { data: workspace } = useQuery({
@@ -43,6 +84,72 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
   const activeProject = selectedProjectId
     ? activeProjects.find((p) => p.id === selectedProjectId) ?? activeProjects[0]
     : activeProjects[0];
+  const activeProjectId = activeProject?.id ?? null;
+
+  const { data: conversations } = useQuery({
+    queryKey: qk.conversations(activeProjectId, 50),
+    queryFn: () => listConversations(50, activeProjectId),
+    enabled: !!activeProjectId,
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+  const { data: runs } = useQuery({
+    queryKey: qk.allRuns(50),
+    queryFn: () => listRuns(50),
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+  const { data: openIssues } = useQuery({
+    queryKey: qk.openIssueCount(activeProjectId),
+    queryFn: () => (activeProjectId ? issueCountOpen(activeProjectId) : Promise.resolve(0)),
+    enabled: !!activeProjectId,
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+  const { data: automations } = useQuery({
+    queryKey: qk.automations(activeProjectId),
+    queryFn: () => (activeProjectId ? listAutomations(activeProjectId) : Promise.resolve([])),
+    enabled: !!activeProjectId,
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+
+  const recentConversations = (conversations ?? []).slice(0, 5);
+  const projectConversationIds = new Set((conversations ?? []).map((c) => c.id));
+  const awaitingReviewCount = (runs ?? []).filter(
+    (r) =>
+      r.conversation_id !== null &&
+      projectConversationIds.has(r.conversation_id) &&
+      isAwaitingReview(r.state, r.publish_status ?? null),
+  ).length;
+  const openIssueCount = openIssues ?? 0;
+  const activeAutomationCount = (automations ?? []).filter((a) => a.enabled).length;
+
+  const attentionItems: { label: string; onClick: () => void }[] = [];
+  if (awaitingReviewCount > 0) {
+    attentionItems.push({
+      label: `${awaitingReviewCount} run${awaitingReviewCount === 1 ? "" : "s"} awaiting review`,
+      onClick: () => onNavigate("sessions"),
+    });
+  }
+  if (openIssueCount > 0) {
+    attentionItems.push({
+      label: `${openIssueCount} open issue${openIssueCount === 1 ? "" : "s"}`,
+      onClick: () => onNavigate("issues"),
+    });
+  }
+  if (activeAutomationCount > 0) {
+    attentionItems.push({
+      label: `${activeAutomationCount} automation${activeAutomationCount === 1 ? "" : "s"} active`,
+      onClick: () => onNavigate("automations"),
+    });
+  }
+
+  const conversationStateColor = (state: string): string => {
+    if (state === "active" || state === "running") return GREEN;
+    if (state === "completed" || state === "closed") return TEXT4;
+    return TEXT3;
+  };
 
   return (
     <div style={s.root}>
@@ -56,12 +163,31 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
 
       {/* ── Product + workspace name ──────────────────────── */}
       <div style={s.productLabel}>Grove</div>
-      <div style={s.workspaceName}>
-        {workspace?.name ?? "Workspace"}
-      </div>
+      <div style={s.workspaceName}>{workspace?.name ?? "Workspace"}</div>
       {activeProjects.length > 0 && (
         <div style={s.workspaceSub}>
           {activeProjects.length} active project{activeProjects.length !== 1 ? "s" : ""}
+        </div>
+      )}
+
+      {/* ── Needs attention ───────────────────────────────── */}
+      {attentionItems.length > 0 && (
+        <div style={s.attentionRow}>
+          {attentionItems.map((item, i) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.onClick}
+              className="attention-chip"
+              style={{
+                ...s.attentionChip,
+                marginLeft: i === 0 ? 0 : 6,
+              }}
+            >
+              <span style={s.attentionDot} />
+              {item.label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -79,12 +205,19 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
                 {i > 0 && <div style={s.divider} />}
                 <button
                   className={isActive ? "proj-row proj-row--active" : "proj-row"}
-                  onClick={() => { onSelectProject?.(p.id); onNavigate("sessions"); }}
+                  onClick={() => {
+                    onSelectProject?.(p.id);
+                    onNavigate("sessions");
+                  }}
                   style={{
                     ...s.projectRow,
                     ...(isActive ? s.projectRowActive : {}),
-                    width: "100%", textAlign: "left", background: isActive ? "rgba(49,185,123,0.045)" : "transparent",
-                    border: "none", cursor: "pointer", fontFamily: "inherit",
+                    width: "100%",
+                    textAlign: "left",
+                    background: isActive ? "rgba(49,185,123,0.045)" : "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
                   }}
                 >
                   {isActive && <div style={s.activeBar} />}
@@ -92,9 +225,7 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
                     <span style={{ ...s.projectName, ...(isActive ? s.projectNameActive : {}) }}>
                       {projectDisplayName(p)}
                     </span>
-                    {p.source_kind === "ssh" && (
-                      <span style={s.badge}>ssh</span>
-                    )}
+                    {p.source_kind === "ssh" && <span style={s.badge}>ssh</span>}
                   </div>
                   <span style={s.projectPath}>{shortenPath(p.root_path)}</span>
                 </button>
@@ -103,6 +234,38 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
           })
         )}
       </div>
+
+      {/* ── Recent sessions panel ─────────────────────────── */}
+      {recentConversations.length > 0 && (
+        <div style={s.panel}>
+          <div style={s.panelHeader}>Recent sessions</div>
+          {recentConversations.map((c, i) => (
+            <div key={c.id}>
+              {i > 0 && <div style={s.divider} />}
+              <button
+                className="session-row"
+                onClick={() => {
+                  onSelectConversation?.(c.id);
+                  onNavigate("sessions");
+                }}
+                style={s.sessionRow}
+              >
+                <div style={s.sessionMeta}>
+                  <span
+                    style={{
+                      ...s.sessionDot,
+                      background: conversationStateColor(c.state),
+                    }}
+                  />
+                  <span style={s.sessionName}>{conversationDisplayName(c)}</span>
+                  <span style={s.sessionKind}>{c.conversation_kind}</span>
+                </div>
+                <span style={s.sessionTime}>{formatRelative(c.updated_at)}</span>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Action buttons ────────────────────────────────── */}
       <div style={s.actions}>
@@ -114,11 +277,7 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
           <PlusIcon />
           New Session
         </button>
-        <button
-          className="action-btn"
-          style={s.btn}
-          onClick={onCreateProject}
-        >
+        <button className="action-btn" style={s.btn} onClick={onCreateProject}>
           <PlusIcon />
           New Project
         </button>
@@ -146,8 +305,15 @@ export function DashboardScreen({ onNewRun, onCreateProject, selectedProjectId, 
 /* ── Inline icon ────────────────────────────────────────── */
 function PlusIcon() {
   return (
-    <svg width={12} height={12} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+    <svg
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+    >
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
@@ -209,7 +375,40 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 11.5,
     color: TEXT4,
     letterSpacing: "0.02em",
-    marginBottom: 36,
+    marginBottom: 20,
+  },
+
+  attentionRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 28,
+    maxWidth: 520,
+  },
+  attentionChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    padding: "5px 10px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: "0.01em",
+    color: TEXT3,
+    background: "rgba(24,27,35,0.70)",
+    border: `1px solid ${BORDER}`,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    transition: "all 0.14s ease",
+  },
+  attentionDot: {
+    width: 5,
+    height: 5,
+    borderRadius: "50%",
+    background: GREEN,
+    boxShadow: "0 0 6px rgba(49,185,123,0.55)",
+    flexShrink: 0,
   },
 
   panel: {
@@ -298,6 +497,61 @@ const s: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
 
+  sessionRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 18px",
+    gap: 12,
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    textAlign: "left" as const,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  sessionMeta: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+    flex: 1,
+  },
+  sessionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    flexShrink: 0,
+  },
+  sessionName: {
+    fontSize: 12.5,
+    fontWeight: 500,
+    color: TEXT1,
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    minWidth: 0,
+  },
+  sessionKind: {
+    fontSize: 9.5,
+    fontWeight: 600,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase" as const,
+    color: TEXT4,
+    background: "rgba(38,42,52,0.6)",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 3,
+    padding: "1px 5px",
+    flexShrink: 0,
+  },
+  sessionTime: {
+    fontSize: 11,
+    color: TEXT4,
+    fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
+    whiteSpace: "nowrap" as const,
+    flexShrink: 0,
+  },
+
   empty: {
     padding: "20px 18px",
     fontSize: 12,
@@ -339,6 +593,15 @@ const css = `
   .proj-row { transition: background 0.12s ease; }
   .proj-row:hover { background: rgba(38,42,52,0.42) !important; }
   .proj-row--active:hover { background: rgba(49,185,123,0.07) !important; }
+
+  .session-row { transition: background 0.12s ease; }
+  .session-row:hover { background: rgba(38,42,52,0.42) !important; }
+
+  .attention-chip:hover {
+    background: rgba(49,185,123,0.10) !important;
+    border-color: rgba(49,185,123,0.30) !important;
+    color: ${GREEN} !important;
+  }
 
   .action-btn { transition: all 0.14s ease; }
   .action-btn:hover {
