@@ -23,6 +23,11 @@ fn init_git_repo(dir: &Path) {
         .output()
         .unwrap();
     Command::new("git")
+        .args(["config", "core.autocrlf", "false"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
         .args(["config", "user.email", "test@test.com"])
         .current_dir(dir)
         .output()
