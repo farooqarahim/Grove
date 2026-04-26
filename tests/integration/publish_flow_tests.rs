@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -29,7 +30,7 @@ struct GhStub {
 }
 
 struct PathGuard {
-    old_path: Option<String>,
+    old_path: Option<OsString>,
 }
 
 impl Drop for PathGuard {
@@ -165,14 +166,18 @@ impl TestRepo {
 
 impl GhStub {
     fn install() -> (Self, PathGuard) {
-        let guard = ENV_LOCK.lock().unwrap();
+        let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
         let bin_dir = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
         let gh_path = bin_dir.path().join("gh");
+        #[cfg(windows)]
+        let gh_path = bin_dir.path().join("gh.cmd");
         let open_pr_file = bin_dir.path().join("open_pr");
         let create_count_file = bin_dir.path().join("pr_create_count");
         let issue_mode_file = bin_dir.path().join("issue_mode");
         fs::write(&issue_mode_file, "success\n").unwrap();
 
+        #[cfg(unix)]
         let script = format!(
             "#!/bin/sh\n\
 OPEN_PR_FILE=\"{}\"\n\
@@ -216,6 +221,60 @@ esac\n",
             create_count_file.display(),
             issue_mode_file.display(),
         );
+        #[cfg(windows)]
+        let script = format!(
+            "@echo off\r\n\
+set \"OPEN_PR_FILE={}\"\r\n\
+set \"CREATE_COUNT_FILE={}\"\r\n\
+set \"ISSUE_MODE_FILE={}\"\r\n\
+if \"%1 %2\"==\"pr list\" goto pr_list\r\n\
+if \"%1 %2\"==\"pr create\" goto pr_create\r\n\
+if \"%1 %2\"==\"pr edit\" exit /b 0\r\n\
+if \"%1 %2\"==\"pr view\" goto pr_view\r\n\
+if \"%1 %2\"==\"pr comment\" exit /b 0\r\n\
+if \"%1 %2\"==\"issue view\" goto issue_view\r\n\
+if \"%1 %2\"==\"issue comment\" goto issue_comment\r\n\
+echo unsupported gh invocation: %1 %2 1>&2\r\n\
+exit /b 1\r\n\
+\r\n\
+:pr_list\r\n\
+if exist \"%OPEN_PR_FILE%\" (\r\n\
+  echo [{{\"number\":1,\"url\":\"https://example.test/pr/1\"}}]\r\n\
+) else (\r\n\
+  echo []\r\n\
+)\r\n\
+exit /b 0\r\n\
+\r\n\
+:pr_create\r\n\
+set count=0\r\n\
+if exist \"%CREATE_COUNT_FILE%\" set /p count=<\"%CREATE_COUNT_FILE%\"\r\n\
+set /a count=count+1\r\n\
+> \"%CREATE_COUNT_FILE%\" echo %count%\r\n\
+> \"%OPEN_PR_FILE%\" echo https://example.test/pr/1\r\n\
+echo https://example.test/pr/1\r\n\
+exit /b 0\r\n\
+\r\n\
+:pr_view\r\n\
+echo {{\"comments\":[]}}\r\n\
+exit /b 0\r\n\
+\r\n\
+:issue_view\r\n\
+echo {{\"comments\":[]}}\r\n\
+exit /b 0\r\n\
+\r\n\
+:issue_comment\r\n\
+set mode=success\r\n\
+if exist \"%ISSUE_MODE_FILE%\" set /p mode=<\"%ISSUE_MODE_FILE%\"\r\n\
+if \"%mode%\"==\"fail\" (\r\n\
+  echo issue comment failed 1>&2\r\n\
+  exit /b 1\r\n\
+)\r\n\
+echo https://example.test/issue/comment/1\r\n\
+exit /b 0\r\n",
+            open_pr_file.display(),
+            create_count_file.display(),
+            issue_mode_file.display(),
+        );
         fs::write(&gh_path, script).unwrap();
         #[cfg(unix)]
         {
@@ -225,16 +284,14 @@ esac\n",
             fs::set_permissions(&gh_path, perms).unwrap();
         }
 
-        let old_path = std::env::var("PATH").ok();
+        let old_path = std::env::var_os("PATH");
+        let mut paths = vec![bin_dir.path().to_path_buf()];
+        if let Some(old_path) = old_path.as_ref() {
+            paths.extend(std::env::split_paths(old_path));
+        }
+        let test_path = std::env::join_paths(paths).expect("join PATH");
         unsafe {
-            std::env::set_var(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    bin_dir.path().display(),
-                    old_path.as_deref().unwrap_or("")
-                ),
-            );
+            std::env::set_var("PATH", test_path);
         }
 
         (
