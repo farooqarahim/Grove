@@ -158,14 +158,13 @@ impl SessionHostRegistry for InMemorySessionHostRegistry {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::providers::session_host::host::ClaudeSessionHost;
     use std::io::Write;
-    use tempfile::NamedTempFile;
 
-    fn fake_claude_script() -> NamedTempFile {
+    fn fake_claude_script() -> std::path::PathBuf {
         let mut f = tempfile::Builder::new()
             .prefix("fake-claude-")
             .suffix(".sh")
@@ -189,7 +188,9 @@ done
             p.set_mode(0o755);
             std::fs::set_permissions(f.path(), p).unwrap();
         }
-        f
+        let (file, path) = f.keep().unwrap();
+        drop(file);
+        path
     }
 
     #[allow(clippy::type_complexity)]
@@ -218,7 +219,7 @@ done
             .get_or_spawn(
                 key.clone(),
                 None,
-                spawn_fake(script.path().to_path_buf(), tmp.path().to_path_buf()),
+                spawn_fake(script.clone(), tmp.path().to_path_buf()),
             )
             .await
             .unwrap();
@@ -226,7 +227,7 @@ done
             .get_or_spawn(
                 key.clone(),
                 None,
-                spawn_fake(script.path().to_path_buf(), tmp.path().to_path_buf()),
+                spawn_fake(script.clone(), tmp.path().to_path_buf()),
             )
             .await
             .unwrap();
@@ -246,7 +247,7 @@ done
         reg.get_or_spawn(
             key.clone(),
             None,
-            spawn_fake(script.path().to_path_buf(), tmp.path().to_path_buf()),
+            spawn_fake(script.clone(), tmp.path().to_path_buf()),
         )
         .await
         .unwrap();
@@ -267,7 +268,7 @@ done
         reg.get_or_spawn(
             key.clone(),
             None,
-            spawn_fake(script.path().to_path_buf(), tmp.path().to_path_buf()),
+            spawn_fake(script.clone(), tmp.path().to_path_buf()),
         )
         .await
         .unwrap();
@@ -295,7 +296,7 @@ done
             (k_match_b.clone(), tmp2.path().to_path_buf()),
             (k_other.clone(), tmp3.path().to_path_buf()),
         ] {
-            reg.get_or_spawn(k, None, spawn_fake(script.path().to_path_buf(), dir))
+            reg.get_or_spawn(k, None, spawn_fake(script.clone(), dir))
                 .await
                 .unwrap();
         }
@@ -334,7 +335,7 @@ done
         reg.get_or_spawn(
             k1.clone(),
             None,
-            spawn_fake(script.path().to_path_buf(), tmp1.path().to_path_buf()),
+            spawn_fake(script.clone(), tmp1.path().to_path_buf()),
         )
         .await
         .unwrap();
@@ -342,7 +343,7 @@ done
         reg.get_or_spawn(
             k2.clone(),
             None,
-            spawn_fake(script.path().to_path_buf(), tmp2.path().to_path_buf()),
+            spawn_fake(script.clone(), tmp2.path().to_path_buf()),
         )
         .await
         .unwrap();
@@ -350,7 +351,7 @@ done
         reg.get_or_spawn(
             k3.clone(),
             None,
-            spawn_fake(script.path().to_path_buf(), tmp3.path().to_path_buf()),
+            spawn_fake(script.clone(), tmp3.path().to_path_buf()),
         )
         .await
         .unwrap();

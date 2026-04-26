@@ -228,13 +228,12 @@ impl ClaudeSessionHost {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::io::Write;
-    use tempfile::NamedTempFile;
 
-    fn fake_claude_script() -> NamedTempFile {
+    fn fake_claude_script() -> PathBuf {
         let mut f = tempfile::Builder::new()
             .prefix("fake-claude-")
             .suffix(".sh")
@@ -255,12 +254,14 @@ done
             perms.set_mode(0o755);
             std::fs::set_permissions(f.path(), perms).unwrap();
         }
-        f
+        let (file, path) = f.keep().unwrap();
+        drop(file);
+        path
     }
 
     /// Stub script that records the argv it was launched with to a sidecar
     /// file at `<script>.argv`, then behaves like `fake_claude_script`.
-    fn fake_claude_argv_recording_script() -> NamedTempFile {
+    fn fake_claude_argv_recording_script() -> PathBuf {
         let mut f = tempfile::Builder::new()
             .prefix("fake-claude-argv-")
             .suffix(".sh")
@@ -288,7 +289,9 @@ done
             perms.set_mode(0o755);
             std::fs::set_permissions(f.path(), perms).unwrap();
         }
-        f
+        let (file, path) = f.keep().unwrap();
+        drop(file);
+        path
     }
 
     #[tokio::test]
@@ -304,13 +307,13 @@ done
             skip_permissions: true,
             model: None,
         };
-        let host = ClaudeSessionHost::spawn_with_options(script.path(), tmp.path(), None, &opts)
+        let host = ClaudeSessionHost::spawn_with_options(&script, tmp.path(), None, &opts)
             .await
             .expect("spawn");
         // Send a turn so the script writes its argv side-car file.
         host.send_turn("hi").await.expect("turn");
 
-        let argv_path = format!("{}.argv", script.path().to_string_lossy());
+        let argv_path = format!("{}.argv", script.to_string_lossy());
         let argv = std::fs::read_to_string(&argv_path).expect("argv file");
         assert!(
             argv.contains("--mcp-config"),
@@ -330,12 +333,12 @@ done
     async fn spawn_default_options_are_minimal() {
         let script = fake_claude_argv_recording_script();
         let tmp = tempfile::tempdir().unwrap();
-        let host = ClaudeSessionHost::spawn(script.path(), tmp.path(), None)
+        let host = ClaudeSessionHost::spawn(&script, tmp.path(), None)
             .await
             .expect("spawn");
         host.send_turn("hi").await.expect("turn");
 
-        let argv_path = format!("{}.argv", script.path().to_string_lossy());
+        let argv_path = format!("{}.argv", script.to_string_lossy());
         let argv = std::fs::read_to_string(&argv_path).expect("argv file");
         assert!(
             !argv.contains("--mcp-config"),
@@ -355,7 +358,7 @@ done
     async fn spawn_and_send_turn_round_trip() {
         let script = fake_claude_script();
         let tmp = tempfile::tempdir().unwrap();
-        let host = ClaudeSessionHost::spawn(script.path(), tmp.path(), None)
+        let host = ClaudeSessionHost::spawn(&script, tmp.path(), None)
             .await
             .expect("spawn");
         let out = host.send_turn("hello").await.expect("turn");
@@ -372,7 +375,7 @@ done
     async fn two_sequential_turns_reuse_same_process() {
         let script = fake_claude_script();
         let tmp = tempfile::tempdir().unwrap();
-        let host = ClaudeSessionHost::spawn(script.path(), tmp.path(), None)
+        let host = ClaudeSessionHost::spawn(&script, tmp.path(), None)
             .await
             .expect("spawn");
         let _a = host.send_turn("turn 1").await.expect("turn 1");
@@ -384,7 +387,7 @@ done
     async fn shutdown_kills_child() {
         let script = fake_claude_script();
         let tmp = tempfile::tempdir().unwrap();
-        let host = ClaudeSessionHost::spawn(script.path(), tmp.path(), None)
+        let host = ClaudeSessionHost::spawn(&script, tmp.path(), None)
             .await
             .expect("spawn");
         host.shutdown().await;
