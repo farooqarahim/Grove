@@ -684,7 +684,7 @@ pub fn execute_objective_with_sink(
             );
         }
     }
-    let needs_provider_binary = provider.name() != "mock";
+    let needs_provider_binary = provider.name() == "claude_code";
     if let Err(msg) = crate::capability::preflight_check(&cap_report, needs_provider_binary) {
         return Err(GroveError::Runtime(format!("preflight failed: {msg}")));
     }
