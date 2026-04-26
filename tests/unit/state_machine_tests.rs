@@ -19,9 +19,7 @@ fn all_legal_transitions_return_true() {
     for (from, to) in legal {
         assert!(
             is_valid_transition(from, to),
-            "{:?} → {:?} should be a valid transition",
-            from,
-            to
+            "{from:?} → {to:?} should be a valid transition"
         );
     }
 }
@@ -43,9 +41,7 @@ fn all_illegal_transitions_return_false() {
     for (from, to) in illegal {
         assert!(
             !is_valid_transition(from, to),
-            "{:?} → {:?} should be an invalid transition",
-            from,
-            to
+            "{from:?} → {to:?} should be an invalid transition"
         );
     }
 }

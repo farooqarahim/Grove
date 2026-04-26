@@ -183,7 +183,8 @@ pub struct RunOptions {
     /// When `Some`, `build_provider` threads it into `ClaudeCodeProvider` via
     /// `.with_session_registry(...)`. Remains `None` everywhere until the daemon
     /// wires the real registry in Task 11.
-    pub session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
+    pub session_host_registry:
+        Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
 }
 
 impl std::fmt::Debug for RunOptions {
@@ -416,7 +417,9 @@ pub fn build_provider(
     project_root: &Path,
     provider_override: Option<&str>,
     permission_override: Option<PermissionMode>,
-    session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
+    session_host_registry: Option<
+        std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>,
+    >,
 ) -> crate::errors::GroveResult<Arc<dyn Provider>> {
     use crate::errors::GroveError;
     use crate::llm::{LlmAuthMode, LlmProviderKind, LlmRouter};
@@ -432,10 +435,12 @@ pub fn build_provider(
                 "provider '{effective}' is disabled in config"
             )));
         }
-        crate::capability::ensure_claude_code_authenticated(&cfg.providers.claude_code.command)
+        let claude_command = std::env::var("GROVE_CLAUDE_BIN")
+            .unwrap_or_else(|_| cfg.providers.claude_code.command.clone());
+        crate::capability::ensure_claude_code_authenticated(&claude_command)
             .map_err(GroveError::Config)?;
         let provider = ClaudeCodeProvider::new(
-            cfg.providers.claude_code.command.clone(),
+            claude_command,
             cfg.providers.claude_code.timeout_seconds,
             permission_override
                 .unwrap_or_else(|| cfg.providers.claude_code.permission_mode.clone()),
@@ -681,7 +686,8 @@ pub fn execute_objective_with_sink(
             );
         }
     }
-    if let Err(msg) = crate::capability::preflight_check(&cap_report, true) {
+    let needs_provider_binary = provider.name() == "claude_code";
+    if let Err(msg) = crate::capability::preflight_check(&cap_report, needs_provider_binary) {
         return Err(GroveError::Runtime(format!("preflight failed: {msg}")));
     }
 

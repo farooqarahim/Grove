@@ -10,8 +10,8 @@ use serde::Deserialize;
 use super::gates::{self, GateDecision, PermissionRequest};
 use super::line_reader::{LineError, TimedLineReader};
 use super::session_host::host::ClaudeSessionHost;
-use super::session_host::protocol::StreamEvent as PersistentStreamEvent;
 use super::session_host::host::SpawnOptions;
+use super::session_host::protocol::StreamEvent as PersistentStreamEvent;
 use super::session_host::{SessionHostRegistry, SessionKey};
 use super::stream_parser::{self, StreamEvent, StreamResult};
 use super::timeout;
@@ -204,10 +204,7 @@ impl ClaudeCodeProvider {
     /// Attach a persistent session registry. When set, `execute_streaming`
     /// will route `SkipAll` requests that carry a `conversation_id` through a
     /// live subprocess instead of cold-spawning.
-    pub fn with_session_registry(
-        mut self,
-        registry: Option<Arc<dyn SessionHostRegistry>>,
-    ) -> Self {
+    pub fn with_session_registry(mut self, registry: Option<Arc<dyn SessionHostRegistry>>) -> Self {
         self.session_registry = registry;
         self
     }
@@ -256,30 +253,32 @@ impl ClaudeCodeProvider {
                 "session-registry warm path requires an active Tokio runtime".into(),
             )
         })?;
-        let outcome = tokio::task::block_in_place(|| handle.block_on(async move {
-            let host = reg
-                .get_or_spawn(
-                    key,
-                    resume,
-                    Box::new(move |sid: Option<&str>| {
-                        let sid_owned = sid.map(|s| s.to_string());
-                        let command = command.clone();
-                        let cwd = cwd.clone();
-                        let opts = spawn_opts.clone();
-                        Box::pin(async move {
-                            ClaudeSessionHost::spawn_with_options(
-                                std::path::Path::new(&command),
-                                &cwd,
-                                sid_owned.as_deref(),
-                                &opts,
-                            )
-                            .await
-                        })
-                    }),
-                )
-                .await?;
-            host.send_turn(&prompt).await
-        }))?;
+        let outcome = tokio::task::block_in_place(|| {
+            handle.block_on(async move {
+                let host = reg
+                    .get_or_spawn(
+                        key,
+                        resume,
+                        Box::new(move |sid: Option<&str>| {
+                            let sid_owned = sid.map(|s| s.to_string());
+                            let command = command.clone();
+                            let cwd = cwd.clone();
+                            let opts = spawn_opts.clone();
+                            Box::pin(async move {
+                                ClaudeSessionHost::spawn_with_options(
+                                    std::path::Path::new(&command),
+                                    &cwd,
+                                    sid_owned.as_deref(),
+                                    &opts,
+                                )
+                                .await
+                            })
+                        }),
+                    )
+                    .await?;
+                host.send_turn(&prompt).await
+            })
+        })?;
 
         // NOTE: warm path emits all events post-turn; streaming granularity is turn-level,
         // not token-level (a consequence of ClaudeSessionHost::send_turn buffering events).
@@ -354,9 +353,7 @@ impl Provider for ClaudeCodeProvider {
         // callers get a NullSink (events are still buffered into the
         // ProviderResponse summary by execute_streaming_warm).
         if self.permission_mode == PermissionMode::SkipAll {
-            if let (Some(reg), Some(conv_id)) =
-                (&self.session_registry, &request.conversation_id)
-            {
+            if let (Some(reg), Some(conv_id)) = (&self.session_registry, &request.conversation_id) {
                 let sink = NullSink;
                 return self.execute_streaming_warm(request, &sink, reg, conv_id);
             }
@@ -438,9 +435,7 @@ impl Provider for ClaudeCodeProvider {
         //   2. The request carries a conversation_id (keying the session).
         //   3. PermissionMode is SkipAll — gate modes require re-spawn capability.
         if self.permission_mode == PermissionMode::SkipAll {
-            if let (Some(reg), Some(conv_id)) =
-                (&self.session_registry, &request.conversation_id)
-            {
+            if let (Some(reg), Some(conv_id)) = (&self.session_registry, &request.conversation_id) {
                 return self.execute_streaming_warm(request, sink, reg, conv_id);
             }
         }
@@ -2205,15 +2200,21 @@ fn extract_json(s: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::fs;
     use std::io::Cursor;
     use std::process::Command;
+    #[cfg(unix)]
     use std::sync::{Arc, Mutex};
 
+    #[cfg(unix)]
     use crate::config::PermissionMode;
+    #[cfg(unix)]
     use crate::providers::{NullSink, Provider, ProviderRequest};
 
-    use super::{ClaudeCodeProvider, collect_capped, collect_stream};
+    #[cfg(unix)]
+    use super::ClaudeCodeProvider;
+    use super::{collect_capped, collect_stream};
 
     /// Spawn a long-lived no-op child so we have a valid `Child` handle.
     fn dummy_child() -> std::process::Child {

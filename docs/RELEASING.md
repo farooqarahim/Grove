@@ -35,6 +35,11 @@ opt-in users.
 
 These secrets must exist on the **private** repo (where the workflows run).
 
+For a public production desktop release, configure the updater signing key and
+the platform signing credentials for the platforms you distribute. Builds
+without Apple notarization or Windows code signing are suitable for internal or
+beta testing only, because users will see operating-system trust warnings.
+
 ### Always required
 
 | Secret | Purpose |

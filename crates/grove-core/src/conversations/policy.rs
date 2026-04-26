@@ -85,7 +85,10 @@ mod tests {
     }
 
     fn cfg(max_cached: usize, max_idle_secs: i64) -> SweepConfig {
-        SweepConfig { max_cached, max_idle_secs }
+        SweepConfig {
+            max_cached,
+            max_idle_secs,
+        }
     }
 
     #[test]
@@ -139,8 +142,8 @@ mod tests {
     #[test]
     fn combined_age_and_count_union() {
         let mut cands = vec![
-            c("ancient", 0, false),      // age-evict
-            c("pinned_old", 0, true),    // protected
+            c("ancient", 0, false),   // age-evict
+            c("pinned_old", 0, true), // protected
         ];
         for i in 0..55 {
             cands.push(c(&format!("c{:02}", i), 10_000 + i as i64, false));
@@ -175,11 +178,7 @@ mod tests {
 
     #[test]
     fn stable_tie_breaking_by_id() {
-        let cands = vec![
-            c("b", 100, false),
-            c("a", 100, false),
-            c("c", 100, false),
-        ];
+        let cands = vec![c("b", 100, false), c("a", 100, false), c("c", 100, false)];
         // max_cached=1 → overflow=2. Oldest 2 by (last, id) = a, b.
         let got = select_evictions(&cands, &cfg(1, 1_000_000), 200, &HashSet::new());
         assert_eq!(got, vec!["a".to_string(), "b".to_string()]);

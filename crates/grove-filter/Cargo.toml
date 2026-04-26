@@ -11,6 +11,6 @@ name = "grove-filter"
 path = "src/main.rs"
 
 [dependencies]
-grove-core = { path = "../grove-core" }
+grove-core = { path = "../grove-core", version = "0.1.1" }
 serde_json.workspace = true
 libc.workspace = true

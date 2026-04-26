@@ -156,6 +156,7 @@ impl PersistentPhaseProvider for RecordingProvider {
 fn minimal_config() -> GroveConfig {
     let mut cfg: GroveConfig = serde_yaml::from_str(DEFAULT_CONFIG_YAML).unwrap();
     cfg.providers.claude_code.enabled = false;
+    cfg.providers.claude_code.command = "missing-claude-for-recording-provider-test".to_string();
     cfg.orchestration.enforce_design_first = false;
     cfg.agents.reviewer.enabled = false;
     cfg.agents.qa.enabled = false;

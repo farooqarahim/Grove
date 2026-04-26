@@ -8,7 +8,7 @@ This guide walks you through installing Grove, running your first objective, and
 
 Before installing Grove, make sure you have:
 
-- **Rust 1.85+** — install via [rustup.rs](https://rustup.rs/)
+- **Rust 1.88+** — install via [rustup.rs](https://rustup.rs/)
 - **Git 2.30+** — required for git worktree support
 - **Claude Code CLI** — the `claude` binary; install from [claude.ai/code](https://claude.ai/code)
 - **Node.js 18+** — only needed if you want to use the desktop GUI
@@ -16,7 +16,7 @@ Before installing Grove, make sure you have:
 Verify your setup:
 
 ```bash
-rustc --version       # rustc 1.85.0 or newer
+rustc --version       # rustc 1.88.0 or newer
 git --version         # git version 2.30.0 or newer
 claude --version      # any recent version
 ```

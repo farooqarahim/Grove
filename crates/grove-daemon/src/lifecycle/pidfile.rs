@@ -65,6 +65,7 @@ mod tests {
         assert!(!p.exists(), "pid file should be removed on drop");
     }
 
+    #[cfg(unix)]
     #[test]
     fn second_acquire_with_live_pid_fails() {
         let tmp = tempdir().unwrap();

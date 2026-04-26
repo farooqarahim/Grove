@@ -6,11 +6,15 @@
 //! transparently invoke `grove-filter` instead of the real command.
 
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
 use super::project_type::{self, ProjectType};
+#[cfg(unix)]
 use super::session::FilterState;
+#[cfg(unix)]
 use super::token_count;
 
 /// Info returned after shim setup, used to inject env vars into the agent process.
@@ -21,18 +25,24 @@ pub struct ShimSetup {
 }
 
 /// Commands to create shims for, grouped by project type.
+#[cfg(unix)]
 const ALWAYS_SHIMMED: &[&str] = &["git", "cat", "head", "tail", "less", "bat"];
+#[cfg(unix)]
 const RUST_SHIMMED: &[&str] = &["cargo"];
+#[cfg(unix)]
 const NODE_SHIMMED: &[&str] = &[
     "tsc", "eslint", "vitest", "jest", "npx", "node", "next", "pnpm", "npm", "yarn", "bun",
 ];
+#[cfg(unix)]
 const PYTHON_SHIMMED: &[&str] = &["pytest", "python", "ruff", "mypy"];
+#[cfg(unix)]
 const GO_SHIMMED: &[&str] = &["go"];
 
 /// Set up the shim directory and initial filter state for a run.
 ///
 /// Returns `None` if the grove-filter binary cannot be located (graceful
 /// degradation — the agent runs without output filtering).
+#[cfg(unix)]
 pub fn setup(
     worktree: &Path,
     run_id: &str,
@@ -98,12 +108,26 @@ pub fn setup(
     })
 }
 
+/// Non-Unix platforms do not support the POSIX symlink-based shim directory.
+/// Returning `None` keeps token filtering as graceful degradation.
+#[cfg(not(unix))]
+pub fn setup(
+    _worktree: &Path,
+    _run_id: &str,
+    _model: &str,
+    _config: Option<&crate::config::TokenFilterConfig>,
+) -> Option<ShimSetup> {
+    tracing::debug!("token-filter command shims are not supported on this platform");
+    None
+}
+
 /// Locate the grove-filter binary.
 ///
 /// Search order:
 /// 1. `GROVE_FILTER_BIN` env var (explicit override)
 /// 2. Adjacent to the current executable
 /// 3. Cargo target directory (debug/release builds)
+#[cfg(unix)]
 fn resolve_grove_filter_binary() -> Option<PathBuf> {
     // 1. Explicit env var
     if let Ok(path) = std::env::var("GROVE_FILTER_BIN") {

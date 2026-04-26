@@ -1,17 +1,30 @@
-use anyhow::{Context, Result};
+#[cfg(unix)]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
+#[cfg(unix)]
 use tokio::signal::unix::{SignalKind, signal};
+#[cfg(unix)]
 use tokio::sync::Notify;
+#[cfg(unix)]
 use tracing::{error, info, warn};
 
 use crate::config::DaemonConfig;
+#[cfg(unix)]
 use crate::queue_drain::{self, DrainShutdown, DrainSignal};
+#[cfg(unix)]
 use crate::rpc::envelope::{RpcError, RpcRequest, RpcResponse};
+#[cfg(unix)]
 use crate::rpc::{DispatchCtx, dispatch};
+#[cfg(unix)]
 use crate::session_host::{build_registry, run_idle_sweep};
 
+#[cfg(unix)]
 pub async fn serve(cfg: DaemonConfig) -> Result<()> {
     let _pid_guard = crate::lifecycle::pidfile::PidGuard::acquire(&cfg.pid_path)?;
     if cfg.socket_path.exists() {
@@ -100,6 +113,12 @@ pub async fn serve(cfg: DaemonConfig) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(unix))]
+pub async fn serve(_cfg: DaemonConfig) -> Result<()> {
+    anyhow::bail!("grove-daemon is only supported on Unix platforms")
+}
+
+#[cfg(unix)]
 async fn handle_connection(stream: UnixStream, ctx: Arc<DispatchCtx>) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
     let mut reader = BufReader::new(reader);

@@ -600,6 +600,7 @@ const MIGRATION_0058_FIX_TIMESTAMP: &str =
 ///   - last_access_at: unix timestamp (INTEGER) updated on each worktree access.
 ///   - cached_size_bytes: bytes occupied by the worktree on disk (updated by sweeper).
 ///   - pinned: non-zero if the worktree must never be evicted by the sweeper.
+///
 /// Backfills last_access_at from updated_at for pre-existing rows so the sweeper
 /// has a reasonable eviction ordering on first run.
 const MIGRATION_0059_ADD_CONVERSATION_LRU: &str = r#"
@@ -1179,11 +1180,9 @@ mod tests {
         .unwrap();
 
         let pinned: i64 = conn
-            .query_row(
-                "SELECT pinned FROM conversations WHERE id='c1'",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT pinned FROM conversations WHERE id='c1'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(pinned, 0, "pinned must default to 0");
 

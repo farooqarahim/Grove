@@ -10,7 +10,7 @@ The GUI crate lives at `crates/grove-gui/`.
 
 | Tool | Minimum version | Install |
 |------|-----------------|---------|
-| **Rust** | 1.85+ | [rustup.rs](https://rustup.rs) |
+| **Rust** | 1.88+ | [rustup.rs](https://rustup.rs) |
 | **Node.js** | 18+ | [nodejs.org](https://nodejs.org) |
 | **Tauri CLI** | 2.x | `cargo install tauri-cli --version '^2'` |
 

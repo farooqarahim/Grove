@@ -655,8 +655,7 @@ fn dispatch_orchestrator_with_session(
         resume.as_deref(),
     )?;
     if let Some(sid) = &result.provider_session_id {
-        if let Err(e) =
-            grove_graph_repo::set_graph_orchestrator_session(conn, graph_id, Some(sid))
+        if let Err(e) = grove_graph_repo::set_graph_orchestrator_session(conn, graph_id, Some(sid))
         {
             warn!(graph_id, error = %e, "failed to persist orchestrator session id");
         }

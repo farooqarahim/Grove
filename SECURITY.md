@@ -5,9 +5,11 @@
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do not** open a public GitHub issue for security vulnerabilities
-2. Email security concerns to the maintainers directly
-3. Include a description of the vulnerability and steps to reproduce
-4. Allow reasonable time for a fix before public disclosure
+2. Use GitHub private vulnerability reporting:
+   `https://github.com/farooqarahim/Grove/security/advisories/new`
+3. If private vulnerability reporting is unavailable, contact the maintainer privately through GitHub before public disclosure
+4. Include a description of the vulnerability and steps to reproduce
+5. Allow reasonable time for a fix before public disclosure
 
 ## Supported Versions
 

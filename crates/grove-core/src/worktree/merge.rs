@@ -1066,7 +1066,7 @@ fn collect_file_hashes(root: &Path, dir: &Path, filter: &GitignoreFilter) -> Has
             hasher.write(target.to_string_lossy().as_bytes());
             let hash = hasher.finish();
             if let Ok(rel) = path.strip_prefix(root) {
-                map.insert(rel.to_string_lossy().into_owned(), hash);
+                map.insert(repo_relative_path(rel), hash);
             }
         } else if ft.is_file() {
             let hash = if let Ok(file) = std::fs::File::open(&path) {
@@ -1085,11 +1085,22 @@ fn collect_file_hashes(root: &Path, dir: &Path, filter: &GitignoreFilter) -> Has
                 0
             };
             if let Ok(rel) = path.strip_prefix(root) {
-                map.insert(rel.to_string_lossy().into_owned(), hash);
+                map.insert(repo_relative_path(rel), hash);
             }
         } else if ft.is_dir() {
             map.extend(collect_file_hashes(root, &path, filter));
         }
     }
     map
+}
+
+fn repo_relative_path(rel: &Path) -> String {
+    let mut path = String::new();
+    for component in rel.components() {
+        if !path.is_empty() {
+            path.push('/');
+        }
+        path.push_str(&component.as_os_str().to_string_lossy());
+    }
+    path
 }

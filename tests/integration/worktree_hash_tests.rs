@@ -454,7 +454,7 @@ fn three_way_merge_same_line_produces_markers() {
                 "should have at least one conflict region"
             );
         }
-        other => panic!("expected ThreeWayWithMarkers, got {:?}", other),
+        other => panic!("expected ThreeWayWithMarkers, got {other:?}"),
     }
     assert!(result.has_unresolved_conflicts());
 
@@ -1891,6 +1891,11 @@ fn init_git_repo(dir: &std::path::Path) {
     use std::process::Command;
     Command::new("git")
         .args(["init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "core.autocrlf", "false"])
         .current_dir(dir)
         .output()
         .unwrap();

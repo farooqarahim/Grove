@@ -1,6 +1,9 @@
+#[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::time::Duration;
 
 use super::{RunResult, StartRunRequest, Transport};
@@ -27,57 +30,94 @@ impl SocketTransport {
         self.call(method, params)
     }
 
+    pub fn can_connect(sock_path: &std::path::Path) -> bool {
+        connect_socket(sock_path).is_ok()
+    }
+
     /// Send a JSON-RPC 2.0 request over the Unix socket and return the result.
     fn call(&self, method: &str, params: serde_json::Value) -> CliResult<serde_json::Value> {
-        let stream = UnixStream::connect(&self.sock_path).map_err(|e| {
-            CliError::Transport(format!("connect to {}: {e}", self.sock_path.display()))
-        })?;
-        stream
-            .set_write_timeout(Some(Duration::from_secs(30)))
-            .map_err(|e| CliError::Transport(format!("set write timeout: {e}")))?;
-        stream
-            .set_read_timeout(Some(Duration::from_secs(60)))
-            .map_err(|e| CliError::Transport(format!("set read timeout: {e}")))?;
-
-        let request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        });
-        let mut request_bytes = serde_json::to_vec(&request)
-            .map_err(|e| CliError::Transport(format!("serialize request: {e}")))?;
-        request_bytes.push(b'\n');
-
-        let mut writer = stream
-            .try_clone()
-            .map_err(|e| CliError::Transport(format!("clone stream: {e}")))?;
-        writer
-            .write_all(&request_bytes)
-            .map_err(|e| CliError::Transport(format!("send request: {e}")))?;
-
-        let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .map_err(|e| CliError::Transport(format!("read response: {e}")))?;
-
-        let response: serde_json::Value = serde_json::from_str(line.trim())
-            .map_err(|e| CliError::Transport(format!("parse response: {e}")))?;
-
-        if let Some(error) = response.get("error") {
-            let msg = error
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("rpc error");
-            return Err(CliError::Transport(msg.to_string()));
-        }
-
-        Ok(response
-            .get("result")
-            .cloned()
-            .unwrap_or(serde_json::Value::Null))
+        call_socket(&self.sock_path, method, params)
     }
+}
+
+#[cfg(unix)]
+fn connect_socket(sock_path: &std::path::Path) -> CliResult<UnixStream> {
+    UnixStream::connect(sock_path)
+        .map_err(|e| CliError::Transport(format!("connect to {}: {e}", sock_path.display())))
+}
+
+#[cfg(not(unix))]
+fn connect_socket(sock_path: &std::path::Path) -> CliResult<()> {
+    Err(CliError::Transport(format!(
+        "Unix socket transport is not supported on this platform: {}",
+        sock_path.display()
+    )))
+}
+
+#[cfg(unix)]
+fn call_socket(
+    sock_path: &std::path::Path,
+    method: &str,
+    params: serde_json::Value,
+) -> CliResult<serde_json::Value> {
+    let stream = connect_socket(sock_path)?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(30)))
+        .map_err(|e| CliError::Transport(format!("set write timeout: {e}")))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(60)))
+        .map_err(|e| CliError::Transport(format!("set read timeout: {e}")))?;
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+        "id": 1
+    });
+    let mut request_bytes = serde_json::to_vec(&request)
+        .map_err(|e| CliError::Transport(format!("serialize request: {e}")))?;
+    request_bytes.push(b'\n');
+
+    let mut writer = stream
+        .try_clone()
+        .map_err(|e| CliError::Transport(format!("clone stream: {e}")))?;
+    writer
+        .write_all(&request_bytes)
+        .map_err(|e| CliError::Transport(format!("send request: {e}")))?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .map_err(|e| CliError::Transport(format!("read response: {e}")))?;
+
+    let response: serde_json::Value = serde_json::from_str(line.trim())
+        .map_err(|e| CliError::Transport(format!("parse response: {e}")))?;
+
+    if let Some(error) = response.get("error") {
+        let msg = error
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("rpc error");
+        return Err(CliError::Transport(msg.to_string()));
+    }
+
+    Ok(response
+        .get("result")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null))
+}
+
+#[cfg(not(unix))]
+fn call_socket(
+    sock_path: &std::path::Path,
+    _method: &str,
+    _params: serde_json::Value,
+) -> CliResult<serde_json::Value> {
+    Err(CliError::Transport(format!(
+        "Unix socket transport is not supported on this platform: {}",
+        sock_path.display()
+    )))
 }
 
 impl Transport for SocketTransport {

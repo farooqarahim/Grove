@@ -1,11 +1,11 @@
 //! Verifies ClaudeCodeProvider takes the warm path when a SessionHostRegistry
 //! is injected AND the request carries a conversation id. Uses a fake claude
-//! shell script so no network calls or real Anthropic API are involved.
+//! command so no network calls or real Anthropic API are involved.
 
 use grove_core::config::PermissionMode;
 use grove_core::providers::claude_code::ClaudeCodeProvider;
-use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use grove_core::providers::session_host::SessionHostRegistry;
+use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use grove_core::providers::{Provider, ProviderRequest, StreamOutputEvent, StreamSink};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -17,23 +17,13 @@ impl StreamSink for CaptureSink {
     }
 }
 
-fn fake_script() -> tempfile::NamedTempFile {
+fn fake_script() -> tempfile::TempPath {
     let mut f = tempfile::Builder::new()
         .prefix("fake-claude-")
-        .suffix(".sh")
+        .suffix(fake_script_suffix())
         .tempfile()
         .unwrap();
-    writeln!(
-        f,
-        r#"#!/bin/sh
-while IFS= read -r line; do
-  printf '%s\n' '{{"type":"system","session_id":"WARM","model":"fake"}}'
-  printf '%s\n' '{{"type":"assistant","message":{{"content":[{{"type":"text","text":"warm-ack"}}]}}}}'
-  printf '%s\n' '{{"type":"result","subtype":"success","session_id":"WARM","cost_usd":0.0,"is_error":false}}'
-done
-"#
-    )
-    .unwrap();
+    writeln!(f, "{}", fake_script_body()).unwrap();
     f.flush().unwrap();
     #[cfg(unix)]
     {
@@ -42,7 +32,41 @@ done
         p.set_mode(0o755);
         std::fs::set_permissions(f.path(), p).unwrap();
     }
-    f
+    f.into_temp_path()
+}
+
+#[cfg(unix)]
+fn fake_script_suffix() -> &'static str {
+    ".sh"
+}
+
+#[cfg(windows)]
+fn fake_script_suffix() -> &'static str {
+    ".cmd"
+}
+
+#[cfg(unix)]
+fn fake_script_body() -> &'static str {
+    r#"#!/bin/sh
+while IFS= read -r line; do
+  printf '%s\n' '{"type":"system","session_id":"WARM","model":"fake"}'
+  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"warm-ack"}]}}'
+  printf '%s\n' '{"type":"result","subtype":"success","session_id":"WARM","cost_usd":0.0,"is_error":false}'
+done
+"#
+}
+
+#[cfg(windows)]
+fn fake_script_body() -> &'static str {
+    r#"@echo off
+:loop
+set /p line=
+if errorlevel 1 exit /b 0
+echo {"type":"system","session_id":"WARM","model":"fake"}
+echo {"type":"assistant","message":{"content":[{"type":"text","text":"warm-ack"}]}}
+echo {"type":"result","subtype":"success","session_id":"WARM","cost_usd":0.0,"is_error":false}
+goto loop
+"#
 }
 
 fn make_request(prompt: &str, conv_id: &str, worktree: &str) -> ProviderRequest {
@@ -70,7 +94,7 @@ async fn warm_path_emits_assistant_text_from_registry() {
     let reg: Arc<dyn SessionHostRegistry> =
         Arc::new(InMemorySessionHostRegistry::new(RegistryConfig::default()));
     let provider = ClaudeCodeProvider::new(
-        script.path().to_string_lossy().to_string(),
+        script.to_string_lossy().to_string(),
         60,
         PermissionMode::SkipAll,
         Vec::new(),
@@ -86,12 +110,10 @@ async fn warm_path_emits_assistant_text_from_registry() {
     // block_in_place + Handle::current() can use this multi-thread runtime.
     let provider_arc = Arc::new(provider);
     let p_for_task = Arc::clone(&provider_arc);
-    let resp = tokio::task::spawn_blocking(move || {
-        p_for_task.execute_streaming(&req, &sink)
-    })
-    .await
-    .unwrap()
-    .expect("warm turn");
+    let resp = tokio::task::spawn_blocking(move || p_for_task.execute_streaming(&req, &sink))
+        .await
+        .unwrap()
+        .expect("warm turn");
 
     assert_eq!(resp.provider_session_id.as_deref(), Some("WARM"));
     assert!(
@@ -125,7 +147,7 @@ async fn two_turns_reuse_one_host() {
         Arc::new(InMemorySessionHostRegistry::new(RegistryConfig::default()));
     let provider = Arc::new(
         ClaudeCodeProvider::new(
-            script.path().to_string_lossy().to_string(),
+            script.to_string_lossy().to_string(),
             60,
             PermissionMode::SkipAll,
             Vec::new(),

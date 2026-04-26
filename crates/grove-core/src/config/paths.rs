@@ -42,18 +42,16 @@ pub fn config_path(project_root: &Path) -> PathBuf {
 /// directory contains only worktrees, config, and files that belong under VCS.
 ///
 /// Falls back to `project_root` itself in two cases:
-/// - The path is already under `~/.grove/workspaces/` (GroveApp virtual root —
-///   avoids double-wrapping the machine-level workspace DB).
+/// - The path is already under `~/.grove/workspaces/` (workspace data root —
+///   avoids double-wrapping the workspace DB).
 /// - The path is under the system temp directory (test fixtures — keeps test
 ///   DBs isolated and prevents residue in `~/.grove/workspaces/`).
 pub fn project_db_dir(project_root: &Path) -> PathBuf {
-    // GroveApp passes ~/.grove/workspaces/<machine_id>/ as its virtual root.
+    // GroveApp passes ~/.grove/workspaces/<workspace_id>/ as the data root.
     // Centralising again would double-wrap it — use the path as-is.
-    if let Ok(home) = std::env::var("HOME") {
-        let workspaces = PathBuf::from(&home).join(".grove").join("workspaces");
-        if project_root.starts_with(&workspaces) {
-            return project_root.to_path_buf();
-        }
+    let workspaces = grove_app_dir().join("workspaces");
+    if project_root.starts_with(&workspaces) {
+        return project_root.to_path_buf();
     }
 
     // Test fixtures use the system temp dir. Keep DBs local there so each
@@ -76,7 +74,7 @@ pub fn project_db_dir(project_root: &Path) -> PathBuf {
 ///
 /// For real project roots the database lives centrally, outside the project
 /// directory. The project's `.grove/` is kept for worktrees and config only.
-/// For GroveApp virtual roots and test temp dirs, falls back to the old
+/// For workspace data roots and test temp dirs, falls back to the old
 /// `project_root/.grove/grove.db` path.
 pub fn db_path(project_root: &Path) -> PathBuf {
     project_db_dir(project_root).join(".grove").join("grove.db")
@@ -229,18 +227,12 @@ mod tests {
     }
 
     #[test]
-    fn project_db_dir_skips_grove_virtual_roots() {
-        // GroveApp passes ~/.grove/workspaces/<id>/ — must not be double-wrapped.
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let virtual_root = PathBuf::from(&home)
-            .join(".grove")
-            .join("workspaces")
-            .join("test_machine_id");
-        // Even if the dir doesn't exist on disk, the path-prefix check fires.
-        let db_dir = project_db_dir(&virtual_root);
+    fn project_db_dir_skips_workspace_data_roots() {
+        let workspace_root = workspace_data_root("test_workspace_id");
+        let db_dir = project_db_dir(&workspace_root);
         assert_eq!(
-            db_dir, virtual_root,
-            "virtual data root must not be re-centralized"
+            db_dir, workspace_root,
+            "workspace data root must not be re-centralized"
         );
     }
 

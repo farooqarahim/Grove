@@ -1791,6 +1791,7 @@ mod tests {
         run_git(dir.path(), &["init", "-b", "main"]).unwrap();
         run_git(dir.path(), &["config", "user.email", "test@test.com"]).unwrap();
         run_git(dir.path(), &["config", "user.name", "Test"]).unwrap();
+        run_git(dir.path(), &["config", "core.autocrlf", "false"]).unwrap();
         std::fs::write(dir.path().join("README.md"), "# Test\n").unwrap();
         run_git(dir.path(), &["add", "."]).unwrap();
         run_git(dir.path(), &["commit", "-m", "initial"]).unwrap();

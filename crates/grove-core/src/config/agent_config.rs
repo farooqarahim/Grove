@@ -807,10 +807,15 @@ Write `{artifact_filename}`.
 
         let artifacts_dir = Path::new("/tmp/artifacts");
         let rendered = render_prompt(&config, "Add auth", "abc12345def", artifacts_dir);
+        let expected_artifact = artifacts_dir
+            .join("GROVE_PRD_abc12345.md")
+            .display()
+            .to_string();
+        let expected_artifacts_dir = artifacts_dir.display().to_string();
         assert!(rendered.contains("Add auth"));
-        assert!(rendered.contains("/tmp/artifacts/GROVE_PRD_abc12345.md"));
+        assert!(rendered.contains(&expected_artifact));
         assert!(rendered.contains("abc12345"));
-        assert!(rendered.contains("/tmp/artifacts"));
+        assert!(rendered.contains(&expected_artifacts_dir));
     }
 
     #[test]

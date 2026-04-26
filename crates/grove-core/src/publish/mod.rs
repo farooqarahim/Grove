@@ -995,7 +995,7 @@ fn ensure_pr(
 
     let body_file = std::env::temp_dir().join(format!("grove_pr_{}.md", branch.replace('/', "_")));
     std::fs::write(&body_file, body)?;
-    let mut cmd = Command::new("gh");
+    let mut cmd = gh_command();
     cmd.args([
         "pr",
         "create",
@@ -1032,7 +1032,7 @@ fn find_existing_pr(
     branch: &str,
     target_branch: &str,
 ) -> GroveResult<Option<PrInfo>> {
-    let mut cmd = Command::new("gh");
+    let mut cmd = gh_command();
     cmd.args([
         "pr",
         "list",
@@ -1067,7 +1067,7 @@ fn find_existing_pr(
 fn update_pr_body(run_worktree_path: &Path, number: u64, body: &str) -> GroveResult<()> {
     let body_file = std::env::temp_dir().join(format!("grove_pr_body_{number}.md"));
     std::fs::write(&body_file, body)?;
-    let mut cmd = Command::new("gh");
+    let mut cmd = gh_command();
     cmd.args([
         "pr",
         "edit",
@@ -1096,7 +1096,7 @@ fn ensure_pr_comment(
     if pr_has_marker(run_worktree_path, pr_number, run_id)? {
         return Ok(());
     }
-    let mut cmd = Command::new("gh");
+    let mut cmd = gh_command();
     cmd.args(["pr", "comment", &pr_number.to_string(), "--body", body])
         .current_dir(run_worktree_path);
     let out = run_command_write(&mut cmd, "gh pr comment")?;
@@ -1110,7 +1110,7 @@ fn ensure_pr_comment(
 }
 
 fn pr_has_marker(run_worktree_path: &Path, pr_number: u64, run_id: &str) -> GroveResult<bool> {
-    let mut cmd = Command::new("gh");
+    let mut cmd = gh_command();
     cmd.args(["pr", "view", &pr_number.to_string(), "--json", "comments"])
         .current_dir(run_worktree_path);
     let out = run_command(&mut cmd, "gh pr view")?;
@@ -1137,7 +1137,7 @@ fn github_issue_has_marker(
     external_id: &str,
     run_id: &str,
 ) -> GroveResult<bool> {
-    let mut cmd = Command::new("gh");
+    let mut cmd = gh_command();
     cmd.args(["issue", "view", external_id, "--json", "comments"])
         .current_dir(project_root);
     let out = run_command(&mut cmd, "gh issue view")?;
@@ -1190,9 +1190,55 @@ fn command_path() -> String {
     // (e.g. Tauri) where the process PATH may be minimal.
     let process = std::env::var("PATH").unwrap_or_default();
     if !process.is_empty() {
-        return format!("{process}:{shell}");
+        let paths = std::env::split_paths(&process).chain(std::env::split_paths(shell));
+        if let Ok(joined) = std::env::join_paths(paths) {
+            return joined.to_string_lossy().to_string();
+        }
+        return process;
     }
     shell.to_string()
+}
+
+fn resolve_command_on_path(binary: &str) -> PathBuf {
+    let path = command_path();
+
+    #[cfg(windows)]
+    {
+        for dir in std::env::split_paths(&path) {
+            for suffix in [".exe", ".cmd", ".bat", ".com"] {
+                let candidate = dir.join(format!("{binary}{suffix}"));
+                if candidate.is_file() {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    which::which_in(binary, Some(&path), ".").unwrap_or_else(|_| PathBuf::from(binary))
+}
+
+#[cfg(windows)]
+fn command_from_resolved_path(path: PathBuf) -> Command {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
+        let shell = std::env::var_os("COMSPEC").unwrap_or_else(|| "cmd.exe".into());
+        let mut cmd = Command::new(shell);
+        cmd.arg("/C").arg(path);
+        return cmd;
+    }
+    Command::new(path)
+}
+
+#[cfg(not(windows))]
+fn command_from_resolved_path(path: PathBuf) -> Command {
+    Command::new(path)
+}
+
+fn gh_command() -> Command {
+    command_from_resolved_path(resolve_command_on_path("gh"))
 }
 
 fn run_command_with_timeout(
@@ -1246,6 +1292,33 @@ mod tests {
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+    struct EnvVarGuard {
+        key: &'static str,
+        old_value: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: std::ffi::OsString) -> Self {
+            let old_value = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, old_value }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if let Some(value) = &self.old_value {
+                    std::env::set_var(self.key, value);
+                } else {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
+
     #[test]
     fn commit_message_uses_issue_prefix_when_present() {
         let ctx = PublishContext {
@@ -1272,6 +1345,44 @@ mod tests {
             20,
         );
         assert!(short.chars().count() <= 20);
+    }
+
+    #[test]
+    fn gh_command_invokes_process_path_shim_first() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let bin_dir = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
+        let gh_path = bin_dir.path().join("gh");
+        #[cfg(windows)]
+        let gh_path = bin_dir.path().join("gh.cmd");
+        #[cfg(unix)]
+        fs::write(&gh_path, "#!/bin/sh\nprintf '%s %s\\n' \"$1\" \"$2\"\n").unwrap();
+        #[cfg(windows)]
+        fs::write(&gh_path, "@echo off\r\necho %1 %2\r\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&gh_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&gh_path, perms).unwrap();
+        }
+
+        let old_path = std::env::var_os("PATH");
+        let mut paths = vec![bin_dir.path().to_path_buf()];
+        if let Some(old_path) = old_path.as_ref() {
+            paths.extend(std::env::split_paths(old_path));
+        }
+        let test_path = std::env::join_paths(paths).expect("join PATH");
+        let _path_guard = EnvVarGuard::set("PATH", test_path);
+
+        assert_eq!(resolve_command_on_path("gh"), gh_path);
+        let output = gh_command().args(["pr", "list"]).output().unwrap();
+        assert!(
+            output.status.success(),
+            "fake gh should run successfully: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "pr list");
     }
 
     #[test]
@@ -1390,7 +1501,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_comment_failure_marks_publish_failed_and_preserves_pr_url() {
+    fn issue_comment_failure_preserves_published_status_and_pr_url() {
         let _guard = ENV_LOCK.lock().unwrap();
         let repo = TestRepo::new(true);
         let (mut conn, run_id) = repo.seed_run(Some(("github", "123")));
@@ -1402,7 +1513,11 @@ mod tests {
 
         let bin_dir = tempfile::tempdir().unwrap();
         let pr_file = bin_dir.path().join("open_pr");
+        #[cfg(unix)]
         let gh_path = bin_dir.path().join("gh");
+        #[cfg(windows)]
+        let gh_path = bin_dir.path().join("gh.cmd");
+        #[cfg(unix)]
         fs::write(
             &gh_path,
             format!(
@@ -1431,6 +1546,45 @@ esac\n",
             ),
         )
         .unwrap();
+        #[cfg(windows)]
+        fs::write(
+            &gh_path,
+            format!(
+                "@echo off\r\n\
+if \"%1 %2\"==\"pr list\" (\r\n\
+  if exist \"{}\" (\r\n\
+    echo [{{\"number\":1,\"url\":\"https://example.test/pr/1\"}}]\r\n\
+  ) else (\r\n\
+    echo []\r\n\
+  )\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"pr create\" (\r\n\
+  type nul > \"{}\"\r\n\
+  echo https://example.test/pr/1\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"pr edit\" exit /b 0\r\n\
+if \"%1 %2\"==\"pr view\" (\r\n\
+  echo {{\"comments\":[]}}\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"pr comment\" exit /b 0\r\n\
+if \"%1 %2\"==\"issue view\" (\r\n\
+  echo {{\"comments\":[]}}\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"issue comment\" (\r\n\
+  echo issue comment failed 1>&2\r\n\
+  exit /b 1\r\n\
+)\r\n\
+echo unsupported gh invocation: %1 %2 1>&2\r\n\
+exit /b 1\r\n",
+                pr_file.display(),
+                pr_file.display(),
+            ),
+        )
+        .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1439,17 +1593,13 @@ esac\n",
             fs::set_permissions(&gh_path, perms).unwrap();
         }
 
-        let old_path = std::env::var("PATH").ok();
-        unsafe {
-            std::env::set_var(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    bin_dir.path().display(),
-                    old_path.as_deref().unwrap_or("")
-                ),
-            );
+        let old_path = std::env::var_os("PATH");
+        let mut paths = vec![bin_dir.path().to_path_buf()];
+        if let Some(old_path) = old_path.as_ref() {
+            paths.extend(std::env::split_paths(old_path));
         }
+        let test_path = std::env::join_paths(paths).expect("join PATH");
+        let _path_guard = EnvVarGuard::set("PATH", test_path);
 
         let mut cfg = default_config();
         cfg.publish.enabled = true;
@@ -1469,12 +1619,6 @@ esac\n",
             None,
         )
         .unwrap();
-
-        if let Some(path) = old_path {
-            unsafe { std::env::set_var("PATH", path) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
-        }
 
         // Issue write-back is best-effort: even when `gh issue comment` fails,
         // the publish should succeed because the push + PR creation worked.
