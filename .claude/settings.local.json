@@ -153,7 +153,12 @@
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(p[''''name''''], p[''''version'''']\\) for p in data[''''packages''''] if ''''sqlite'''' in p[''''name''''].lower\\(\\) or ''''rusqlite'''' in p[''''name''''].lower\\(\\)]\")",
       "Bash(grove doctor:*)",
       "Bash(cargo install:*)",
-      "Bash(/Users/farooqrahim/work/Grove-Dev/Grove/target/debug/grove daemon:*)"
+      "Bash(/Users/farooqrahim/work/Grove-Dev/Grove/target/debug/grove daemon:*)",
+      "Bash(command -v actionlint)",
+      "Bash(actionlint .github/workflows/*.yml)",
+      "Bash(command -v cargo-deny)",
+      "Bash(cargo deny *)",
+      "Bash(awk 'NR>=283 && NR<=310 || NR>=435 && NR<=460 || NR>=635 && NR<=660 || NR>=730 && NR<=755 || NR>=1430 && NR<=1465 || NR>=1565 && NR<=1590 || NR>=1720 && NR<=1745 || NR>=1875 && NR<=1900 || NR>=1975 && NR<=2000' /Users/farooqrahim/work/Grove-Dev/Grove/crates/grove-gui/src-tauri/src/commands/graph.rs)"
     ]
   }
 }

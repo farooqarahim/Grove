@@ -304,6 +304,10 @@ impl Provider for ClaudeCodePersistentProvider {
     fn set_abort_handle(&self, handle: AbortHandle) {
         self.inner.set_abort_handle(handle);
     }
+
+    fn evict_warm_session(&self, conversation_id: &str) {
+        self.inner.evict_warm_session(conversation_id);
+    }
 }
 
 impl PersistentPhaseProvider for ClaudeCodePersistentProvider {

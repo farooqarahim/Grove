@@ -168,17 +168,40 @@ fn build_context(decision: &DecisionType) -> String {
     }
 }
 
-/// Dispatch the orchestrator agent and return raw JSON response.
+/// Build the conversation id used to key the graph-scoped orchestrator
+/// host. The orchestrator persona is shared across all phases of a graph
+/// (chunk planning, failover, deadlock diagnosis, validation triage), so we
+/// keep one warm host per graph.
+pub fn orchestrator_conversation_id(graph_id: &str) -> String {
+    format!("hive:{graph_id}:orchestrator")
+}
+
+/// Successful orchestrator dispatch: the raw JSON-bearing response and the
+/// provider-side session id observed on this turn (if any). The caller
+/// persists the session id so the next decision on the same graph can
+/// cold-resume after registry eviction.
+#[derive(Debug, Clone)]
+pub struct OrchestratorDispatchResult {
+    pub response: String,
+    pub provider_session_id: Option<String>,
+}
+
+/// Dispatch the orchestrator agent and return the raw JSON response plus
+/// the provider session id observed on this turn (if any). Callers persist
+/// the session id so the next decision on the same graph can cold-resume
+/// after registry eviction.
 ///
 /// NOTE: This is a blocking function (Provider::execute is sync).
 /// Callers in async contexts should wrap in `tokio::task::spawn_blocking`.
-pub fn dispatch_orchestrator(
+pub fn dispatch_orchestrator_full(
     provider: &Arc<dyn Provider>,
     decision: &DecisionType,
+    graph_id: &str,
     project_root: &Path,
     db_path: &Path,
     log_dir: Option<&str>,
-) -> GroveResult<String> {
+    resume_provider_session_id: Option<&str>,
+) -> GroveResult<OrchestratorDispatchResult> {
     let skill_content = skill_loader::load_skill(project_root, "execution-orchestrator");
     let context = build_context(decision);
     let instructions = format!("{}\n\n{}", skill_content, context);
@@ -196,7 +219,12 @@ pub fn dispatch_orchestrator(
         .as_ref()
         .map(|p| p.to_string_lossy().into_owned());
 
-    info!(decision_type = decision_label, "dispatching orchestrator");
+    info!(
+        decision_type = decision_label,
+        graph_id,
+        warm_resume = resume_provider_session_id.is_some(),
+        "dispatching orchestrator"
+    );
 
     let session_id = format!("orch-{}", &Uuid::new_v4().to_string()[..8]);
 
@@ -208,12 +236,12 @@ pub fn dispatch_orchestrator(
         model: None, // Use default (most capable)
         allowed_tools: None,
         timeout_override: None,
-        provider_session_id: None,
+        provider_session_id: resume_provider_session_id.map(|s| s.to_string()),
         log_dir: log_dir.map(|s| s.to_string()),
         grove_session_id: Some(session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_path,
-        conversation_id: None,
+        conversation_id: Some(orchestrator_conversation_id(graph_id)),
     };
 
     let response = provider.execute(&request)?;
@@ -222,7 +250,10 @@ pub fn dispatch_orchestrator(
         mcp_inject::cleanup_mcp_config(path);
     }
 
-    Ok(response.summary)
+    Ok(OrchestratorDispatchResult {
+        response: response.summary,
+        provider_session_id: response.provider_session_id,
+    })
 }
 
 /// Parse a chunk planning decision from orchestrator response.

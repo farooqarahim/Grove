@@ -614,6 +614,20 @@ CREATE INDEX IF NOT EXISTS idx_conversations_last_access
 UPDATE meta SET value = '59' WHERE key = 'schema_version';
 "#;
 
+/// Add per-phase and per-graph provider session ids so the hive loop can
+/// resume warm Claude Code subprocesses through `SessionHostRegistry` after
+/// idle eviction or daemon restart. The columns are nullable — only graphs
+/// that have already issued at least one turn will have values set.
+///   - graph_phases.provider_session_id: last provider session id observed
+///     for the phase's worker host. Used as the cold-resume fallback id.
+///   - grove_graphs.orchestrator_provider_session_id: same, for the
+///     graph-scoped orchestrator host.
+const MIGRATION_0060_HIVE_PROVIDER_SESSION: &str = r#"
+ALTER TABLE graph_phases ADD COLUMN provider_session_id TEXT;
+ALTER TABLE grove_graphs ADD COLUMN orchestrator_provider_session_id TEXT;
+UPDATE meta SET value = '60' WHERE key = 'schema_version';
+"#;
+
 /// Upgrade migration for provider-native issue identity and normalized issue metadata.
 const MIGRATION_0033_UPGRADE: &str = "\
 ALTER TABLE issues ADD COLUMN provider_native_id TEXT;\n\
@@ -734,6 +748,7 @@ pub fn initialize(project_root: &Path) -> GroveResult<InitDbResult> {
     apply_migration_if_needed(&mut conn, 57, MIGRATION_0057_TOKEN_FILTER)?;
     apply_migration_if_needed(&mut conn, 58, MIGRATION_0058_FIX_TIMESTAMP)?;
     apply_migration_if_needed(&mut conn, 59, MIGRATION_0059_ADD_CONVERSATION_LRU)?;
+    apply_migration_if_needed(&mut conn, 60, MIGRATION_0060_HIVE_PROVIDER_SESSION)?;
     repair_missing_pipeline_stages(&mut conn)?;
     fix_conversation_kind_constraint(&mut conn)?;
 

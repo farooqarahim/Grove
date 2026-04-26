@@ -13,6 +13,11 @@ use grove_core::automation::scheduler::CronScheduler;
 use grove_core::config::loader::load_or_create;
 use grove_core::db::{DbHandle, DbPool};
 use grove_core::orchestrator::abort_handle::AbortHandle;
+use grove_core::providers::session_host::SessionHostRegistry;
+use grove_core::providers::session_host::registry::{
+    InMemorySessionHostRegistry, RegistryConfig,
+};
+use std::time::Duration;
 
 /// Shared application state managed by Tauri.
 pub struct AppState {
@@ -45,6 +50,11 @@ pub struct AppState {
     pub workflow_engine: Arc<WorkflowEngine>,
     /// DB handle for automation subsystem (used to spawn background services).
     automation_db_handle: DbHandle,
+    /// Process-wide persistent session registry. Shared across every hive
+    /// graph and conversation run started from the GUI so the warm Claude
+    /// Code subprocesses survive between turns and between graphs. Capacity
+    /// matches the daemon defaults (8 hosts, 900s idle timeout).
+    session_registry: Arc<dyn SessionHostRegistry>,
 }
 
 impl AppState {
@@ -56,6 +66,11 @@ impl AppState {
             Arc::clone(&event_bus),
             db_handle.clone(),
         ));
+        let session_registry: Arc<dyn SessionHostRegistry> =
+            Arc::new(InMemorySessionHostRegistry::new(RegistryConfig {
+                max_hosts: 8,
+                idle_timeout: Duration::from_secs(900),
+            }));
         Self {
             pool,
             app_handle,
@@ -68,7 +83,14 @@ impl AppState {
             event_bus,
             workflow_engine,
             automation_db_handle: db_handle,
+            session_registry,
         }
+    }
+
+    /// Borrow the process-wide session registry. Used by hive command
+    /// handlers to give every graph run access to the same warm hosts.
+    pub fn session_registry(&self) -> Arc<dyn SessionHostRegistry> {
+        Arc::clone(&self.session_registry)
     }
 
     /// Spawn background automation services on the tokio runtime.

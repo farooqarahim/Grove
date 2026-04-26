@@ -40,6 +40,26 @@ impl InMemorySessionHostRegistry {
         }
     }
 
+    /// Evict every entry whose key has `conversation_id == conv_id`,
+    /// regardless of `work_dir`. Used by hive at phase boundaries to
+    /// release the worker host without needing to know the worktree path
+    /// the host was spawned with. Returns the number evicted.
+    pub async fn evict_by_conversation(&self, conv_id: &str) -> usize {
+        let to_evict: Vec<SessionKey> = {
+            let map = self.map.lock().await;
+            map.keys()
+                .filter(|k| k.conversation_id == conv_id)
+                .cloned()
+                .collect()
+        };
+        for k in &to_evict {
+            // Drop the lock before each evict so shutdown does not block
+            // other operations on unrelated keys.
+            super::SessionHostRegistry::evict(self, k).await;
+        }
+        to_evict.len()
+    }
+
     /// Remove any entries whose `last_touch` is older than `idle_timeout`.
     /// Returns the number evicted.
     pub async fn sweep_idle(&self) -> usize {
@@ -254,6 +274,51 @@ done
         tokio::time::sleep(Duration::from_millis(60)).await;
         let evicted = reg.sweep_idle().await;
         assert_eq!(evicted, 1);
+        assert_eq!(reg.len().await, 0);
+    }
+
+    #[tokio::test]
+    async fn evict_by_conversation_removes_matching_keys_only() {
+        let script = fake_claude_script();
+        let tmp1 = tempfile::tempdir().unwrap();
+        let tmp2 = tempfile::tempdir().unwrap();
+        let tmp3 = tempfile::tempdir().unwrap();
+        let reg = InMemorySessionHostRegistry::new(RegistryConfig::default());
+
+        // Two hosts under conversation "match", one under "other".
+        let k_match_a = SessionKey::new("match", tmp1.path());
+        let k_match_b = SessionKey::new("match", tmp2.path());
+        let k_other = SessionKey::new("other", tmp3.path());
+
+        for (k, dir) in [
+            (k_match_a.clone(), tmp1.path().to_path_buf()),
+            (k_match_b.clone(), tmp2.path().to_path_buf()),
+            (k_other.clone(), tmp3.path().to_path_buf()),
+        ] {
+            reg.get_or_spawn(
+                k,
+                None,
+                spawn_fake(script.path().to_path_buf(), dir),
+            )
+            .await
+            .unwrap();
+        }
+        assert_eq!(reg.len().await, 3);
+
+        let n = reg.evict_by_conversation("match").await;
+        assert_eq!(n, 2, "must evict both 'match' keys regardless of work_dir");
+        assert_eq!(
+            reg.len().await,
+            1,
+            "the 'other' conversation must remain untouched"
+        );
+    }
+
+    #[tokio::test]
+    async fn evict_by_conversation_no_matches_is_noop() {
+        let reg = InMemorySessionHostRegistry::new(RegistryConfig::default());
+        let n = reg.evict_by_conversation("nope").await;
+        assert_eq!(n, 0);
         assert_eq!(reg.len().await, 0);
     }
 

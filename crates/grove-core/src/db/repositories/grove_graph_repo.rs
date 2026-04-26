@@ -1084,6 +1084,78 @@ pub fn set_phase_git_commit(
     Ok(())
 }
 
+/// Persist the provider-side session id last seen for the phase's worker
+/// host. Stored so a cold-resume after registry eviction or daemon restart
+/// can pass `--session-id <id>` and continue the same conversation.
+///
+/// The column is nullable; pass `None` to clear (e.g. on phase re-open).
+pub fn set_phase_provider_session(
+    conn: &Connection,
+    phase_id: &str,
+    session_id: Option<&str>,
+) -> GroveResult<()> {
+    let now = now_iso();
+    let n = conn.execute(
+        "UPDATE graph_phases SET provider_session_id=?1, updated_at=?2 WHERE id=?3",
+        params![session_id, now, phase_id],
+    )?;
+    if n == 0 {
+        return Err(GroveError::NotFound(format!("graph_phase {phase_id}")));
+    }
+    Ok(())
+}
+
+/// Persist the provider-side session id last seen for the graph's
+/// orchestrator host. The orchestrator is shared across all phases of a
+/// graph; one row per graph.
+pub fn set_graph_orchestrator_session(
+    conn: &Connection,
+    graph_id: &str,
+    session_id: Option<&str>,
+) -> GroveResult<()> {
+    let now = now_iso();
+    let n = conn.execute(
+        "UPDATE grove_graphs \
+            SET orchestrator_provider_session_id=?1, updated_at=?2 \
+          WHERE id=?3",
+        params![session_id, now, graph_id],
+    )?;
+    if n == 0 {
+        return Err(GroveError::NotFound(format!("grove_graph {graph_id}")));
+    }
+    Ok(())
+}
+
+/// Read the phase's last provider session id, if any.
+pub fn get_phase_provider_session(
+    conn: &Connection,
+    phase_id: &str,
+) -> GroveResult<Option<String>> {
+    let val: Option<Option<String>> = conn
+        .query_row(
+            "SELECT provider_session_id FROM graph_phases WHERE id=?1",
+            params![phase_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?;
+    Ok(val.flatten())
+}
+
+/// Read the graph's last orchestrator provider session id, if any.
+pub fn get_graph_orchestrator_session(
+    conn: &Connection,
+    graph_id: &str,
+) -> GroveResult<Option<String>> {
+    let val: Option<Option<String>> = conn
+        .query_row(
+            "SELECT orchestrator_provider_session_id FROM grove_graphs WHERE id=?1",
+            params![graph_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?;
+    Ok(val.flatten())
+}
+
 pub fn set_graph_git_final(
     conn: &Connection,
     graph_id: &str,
@@ -1954,5 +2026,69 @@ mod tests {
         let loaded = get_graph_config(&conn, &gid).unwrap();
         assert!(!loaded.doc_prd);
         assert!(!loaded.platform_frontend);
+    }
+
+    // ── Hive provider session id persistence (migration 0060) ───────────────
+
+    #[test]
+    fn phase_provider_session_round_trip() {
+        let conn = test_db();
+        seed_conversation(&conn, "conv-phase-sid");
+        let gid = insert_graph(&conn, "conv-phase-sid", "G", "d", None).unwrap();
+        let pid = insert_phase(&conn, &gid, "P0", "obj", 0, "[]", false, None).unwrap();
+
+        // No session id by default.
+        assert_eq!(get_phase_provider_session(&conn, &pid).unwrap(), None);
+
+        // Set, read back.
+        set_phase_provider_session(&conn, &pid, Some("sess-abc")).unwrap();
+        assert_eq!(
+            get_phase_provider_session(&conn, &pid).unwrap().as_deref(),
+            Some("sess-abc")
+        );
+
+        // Clear by passing None.
+        set_phase_provider_session(&conn, &pid, None).unwrap();
+        assert_eq!(get_phase_provider_session(&conn, &pid).unwrap(), None);
+    }
+
+    #[test]
+    fn graph_orchestrator_session_round_trip() {
+        let conn = test_db();
+        seed_conversation(&conn, "conv-orch-sid");
+        let gid = insert_graph(&conn, "conv-orch-sid", "G", "d", None).unwrap();
+
+        assert_eq!(get_graph_orchestrator_session(&conn, &gid).unwrap(), None);
+
+        set_graph_orchestrator_session(&conn, &gid, Some("orch-1")).unwrap();
+        assert_eq!(
+            get_graph_orchestrator_session(&conn, &gid)
+                .unwrap()
+                .as_deref(),
+            Some("orch-1")
+        );
+
+        // Overwrite with a newer id.
+        set_graph_orchestrator_session(&conn, &gid, Some("orch-2")).unwrap();
+        assert_eq!(
+            get_graph_orchestrator_session(&conn, &gid)
+                .unwrap()
+                .as_deref(),
+            Some("orch-2")
+        );
+    }
+
+    #[test]
+    fn phase_provider_session_unknown_phase_errors() {
+        let conn = test_db();
+        let err = set_phase_provider_session(&conn, "no-such-phase", Some("x"));
+        assert!(matches!(err, Err(GroveError::NotFound(_))));
+    }
+
+    #[test]
+    fn graph_orchestrator_session_unknown_graph_errors() {
+        let conn = test_db();
+        let err = set_graph_orchestrator_session(&conn, "no-such-graph", Some("x"));
+        assert!(matches!(err, Err(GroveError::NotFound(_))));
     }
 }

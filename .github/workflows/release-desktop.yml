@@ -1,20 +1,33 @@
 # ── Grove Desktop Release ────────────────────────────────────────────────────
 #
-# Builds the Tauri desktop app for macOS arm64 and publishes updater artifacts
-# to the PUBLIC repo (Grove-Tools/grove-loom) so the in-app updater can fetch
-# them without authentication.
+# Multi-platform Tauri build pipeline. Produces signed (when secrets present)
+# bundles for macOS arm64, macOS x86_64, Linux x86_64 (.deb + AppImage), and
+# Windows x86_64 (NSIS + MSI), then publishes to the PUBLIC update repo.
 #
-# Required secrets on the PRIVATE repo (grove-orac):
-#   TAURI_SIGNING_PRIVATE_KEY          — minisign private key for update signing
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — password for the signing key (if set)
-#   RELEASES_REPO_TOKEN                — GitHub PAT with contents:write on Grove-Tools/grove-loom
+# Channel routing
+#   v1.2.3              -> stable channel, manifest = latest.json
+#   v1.2.3-beta.1       -> beta   channel, manifest = beta.json
+#   v1.2.3-rc.1         -> beta   channel (treated as pre-release)
 #
-# To generate a signing keypair:
-#   npx @tauri-apps/cli signer generate -w ~/.tauri/grove.key
-#   → put the PRIVATE key in TAURI_SIGNING_PRIVATE_KEY secret
-#   → put the PUBLIC key in tauri.conf.json → plugins.updater.pubkey
+# Required secrets (PRIVATE repo):
+#   TAURI_SIGNING_PRIVATE_KEY              minisign private key for updater
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD     password for minisign key (optional)
+#   RELEASES_REPO_TOKEN                    PAT with contents:write on Grove-Tools/grove-loom
 #
-name: Release Desktop App
+# Optional signing secrets (when present, signing+notarization activates):
+#   APPLE_CERTIFICATE                      base64-encoded P12
+#   APPLE_CERTIFICATE_PASSWORD             P12 password
+#   APPLE_SIGNING_IDENTITY                 e.g. "Developer ID Application: Foo (TEAMID)"
+#   APPLE_ID                               Apple ID email for notarization
+#   APPLE_PASSWORD                         app-specific password
+#   APPLE_TEAM_ID                          10-char team identifier
+#   WINDOWS_CERTIFICATE                    base64-encoded PFX
+#   WINDOWS_CERTIFICATE_PASSWORD           PFX password
+#
+# All untrusted inputs (tag, ref) are passed via env: to avoid script injection.
+# See docs/RELEASING.md for the full setup runbook.
+# -----------------------------------------------------------------------------
+name: release-desktop
 
 on:
   push:
@@ -23,141 +36,395 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version tag (e.g. v0.2.0)"
+        description: "Version tag (e.g. v0.2.0 or v0.2.0-beta.1)"
         required: true
 
 permissions:
-  contents: write
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
-  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+  RUST_TOOLCHAIN: "1.85.0"
+  NODE_VERSION: "20"
 
 jobs:
+  resolve:
+    name: Resolve tag and channel
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.out.outputs.tag }}
+      version: ${{ steps.out.outputs.version }}
+      channel: ${{ steps.out.outputs.channel }}
+      manifest: ${{ steps.out.outputs.manifest }}
+      prerelease: ${{ steps.out.outputs.prerelease }}
+    steps:
+      - id: out
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$REF_NAME"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not semver-compatible (expected vMAJOR.MINOR.PATCH[-pre])"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          if [[ "$TAG" == *-beta* || "$TAG" == *-rc* || "$TAG" == *-alpha* ]]; then
+            CHANNEL=beta
+            MANIFEST=beta.json
+            PRERELEASE=true
+          else
+            CHANNEL=stable
+            MANIFEST=latest.json
+            PRERELEASE=false
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "channel=$CHANNEL"
+            echo "manifest=$MANIFEST"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved tag=$TAG channel=$CHANNEL manifest=$MANIFEST"
+
   build:
-    name: Build macOS (arm64)
-    runs-on: macos-latest
+    name: Build ${{ matrix.label }}
+    needs: resolve
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-aarch64
+            runner: macos-14
+            target: aarch64-apple-darwin
+            tauri_args: --target aarch64-apple-darwin
+          - label: macos-x86_64
+            runner: macos-13
+            target: x86_64-apple-darwin
+            tauri_args: --target x86_64-apple-darwin
+          - label: linux-x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            tauri_args: --target x86_64-unknown-linux-gnu --bundles deb,appimage,updater
+          - label: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            tauri_args: --target x86_64-pc-windows-msvc --bundles nsis,msi,updater
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate updater signing key is configured
+        shell: bash
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set; auto-update signatures will not be produced. Configure it in repo secrets."
+            exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: crates/grove-gui/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.85.0"
-          targets: aarch64-apple-darwin
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+          workspaces: ". -> target"
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            patchelf \
+            file
 
       - name: Install frontend dependencies
         working-directory: crates/grove-gui
         run: npm ci
 
-      - name: Build Tauri app
+      - name: Detect macOS signing availability
+        if: runner.os == 'macOS'
+        id: macsign
+        shell: bash
+        run: |
+          if [ -n "${APPLE_CERTIFICATE:-}" ] && [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            echo "enabled=true"  >> "$GITHUB_OUTPUT"
+            echo "macOS signing+notarization: ENABLED"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::APPLE_CERTIFICATE / APPLE_SIGNING_IDENTITY not set; bundle will be UNSIGNED. Users will see Gatekeeper warnings."
+          fi
+
+      - name: Detect Windows signing availability
+        if: runner.os == 'Windows'
+        id: winsign
+        shell: bash
+        env:
+          WIN_CERT: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          if [ -n "${WIN_CERT:-}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Windows signing: ENABLED"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::WINDOWS_CERTIFICATE not set; installers will be UNSIGNED. Users will see SmartScreen warnings."
+          fi
+
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows' && steps.winsign.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          WIN_CERT: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WIN_CERT_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfxBytes = [System.Convert]::FromBase64String($env:WIN_CERT)
+          $pfxPath  = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+          $securePass = ConvertTo-SecureString -String $env:WIN_CERT_PWD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePass
+          "WINDOWS_CERTIFICATE_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Remove-Item $pfxPath
+
+      - name: Build Tauri bundle
         uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: crates/grove-gui
-          args: --target aarch64-apple-darwin
+          args: ${{ matrix.tauri_args }}
 
-      - name: Upload build artifacts
+      - name: Collect bundle artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          find target/${{ matrix.target }}/release/bundle -type f \( \
+            -name "*.dmg" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.app.tar.gz.sig" -o \
+            -name "*.deb" -o \
+            -name "*.AppImage" -o \
+            -name "*.AppImage.tar.gz" -o \
+            -name "*.AppImage.tar.gz.sig" -o \
+            -name "*.msi" -o \
+            -name "*.msi.zip" -o \
+            -name "*.msi.zip.sig" -o \
+            -name "*-setup.exe" -o \
+            -name "*-setup.nsis.zip" -o \
+            -name "*-setup.nsis.zip.sig" \
+          \) -exec cp {} staging/ \;
+          echo "=== ${{ matrix.label }} artifacts ==="
+          ls -la staging/
+
+      - name: Upload bundle artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: grove-desktop-macos-arm64
-          path: |
-            target/aarch64-apple-darwin/release/bundle/**/*.dmg
-            target/aarch64-apple-darwin/release/bundle/**/*.app.tar.gz
-            target/aarch64-apple-darwin/release/bundle/**/*.app.tar.gz.sig
+          name: bundle-${{ matrix.label }}
+          path: staging/
           if-no-files-found: error
+          retention-days: 7
 
-  publish-release:
-    name: Publish to grove-loom
-    needs: build
+  publish:
+    name: Publish ${{ needs.resolve.outputs.channel }} to grove-loom
+    needs: [resolve, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download artifacts
+      - name: Download all bundle artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
+          pattern: bundle-*
           merge-multiple: true
 
-      - name: Determine version tag
-        id: tag
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
+      - name: Stage release files
+        shell: bash
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "version=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=$REF_NAME" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Flatten artifacts for upload
-        run: |
-          mkdir -p release-files/
-          find artifacts/ -type f \( \
-            -name "*.dmg" \
-            -o -name "*.app.tar.gz" \
-            -o -name "*.app.tar.gz.sig" \
-          \) -exec cp {} release-files/ \;
+          set -euo pipefail
+          mkdir -p release/
+          find artifacts/ -type f -exec cp -n {} release/ \;
           echo "=== Release files ==="
-          ls -la release-files/
+          ls -la release/
 
-      - name: Generate updater manifest (latest.json)
+      - name: Generate updater manifest
+        shell: bash
         env:
-          TAG: ${{ steps.tag.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          MANIFEST_NAME: ${{ needs.resolve.outputs.manifest }}
           RELEASES_REPO: Grove-Tools/grove-loom
         run: |
-          VERSION="${TAG#v}"
+          set -euo pipefail
+          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-          # Find the macOS arm64 signature
-          SIG_FILE=$(find release-files/ -name "*.app.tar.gz.sig" | head -1)
-          if [ ! -f "$SIG_FILE" ]; then
-            echo "::error::No .app.tar.gz.sig found — updater will not work"
+          sig_for() {
+            local f
+            f=$(find release/ -name "$1" | head -1 || true)
+            [ -n "$f" ] && cat "$f" || true
+          }
+          asset_for() {
+            local f
+            f=$(find release/ -name "$1" ! -name "*.sig" | head -1 || true)
+            [ -n "$f" ] && basename "$f" || true
+          }
+          url_for() {
+            [ -z "$1" ] && return
+            echo "https://github.com/${RELEASES_REPO}/releases/download/${TAG}/$1"
+          }
+
+          DARWIN_ARM_SIG=$(sig_for "*aarch64*.app.tar.gz.sig")
+          DARWIN_ARM_TAR=$(asset_for "*aarch64*.app.tar.gz")
+          DARWIN_X64_SIG=$(sig_for "*x64*.app.tar.gz.sig")
+          DARWIN_X64_TAR=$(asset_for "*x64*.app.tar.gz")
+          LINUX_X64_SIG=$(sig_for "*amd64*.AppImage.tar.gz.sig")
+          LINUX_X64_TAR=$(asset_for "*amd64*.AppImage.tar.gz")
+          WIN_X64_SIG=$(sig_for "*x64-setup.nsis.zip.sig")
+          WIN_X64_TAR=$(asset_for "*x64-setup.nsis.zip")
+
+          jq -n --arg v "$VERSION" --arg t "$TAG" --arg d "$PUB_DATE" \
+            '{version:$v, notes:"Grove \($t)", pub_date:$d, platforms:{}}' \
+            > "release/${MANIFEST_NAME}"
+
+          add_platform() {
+            local key="$1" sig="$2" asset="$3"
+            if [ -z "$sig" ] || [ -z "$asset" ]; then
+              echo "::warning::Skipping $key in updater manifest (signature or asset missing)"
+              return
+            fi
+            local url
+            url=$(url_for "$asset")
+            jq --arg k "$key" --arg s "$sig" --arg u "$url" \
+              '.platforms[$k] = {signature: $s, url: $u}' "release/${MANIFEST_NAME}" \
+              > "release/${MANIFEST_NAME}.tmp" && mv "release/${MANIFEST_NAME}.tmp" "release/${MANIFEST_NAME}"
+          }
+
+          add_platform darwin-aarch64 "$DARWIN_ARM_SIG" "$DARWIN_ARM_TAR"
+          add_platform darwin-x86_64  "$DARWIN_X64_SIG" "$DARWIN_X64_TAR"
+          add_platform linux-x86_64   "$LINUX_X64_SIG"  "$LINUX_X64_TAR"
+          add_platform windows-x86_64 "$WIN_X64_SIG"    "$WIN_X64_TAR"
+
+          echo "=== ${MANIFEST_NAME} ==="
+          cat "release/${MANIFEST_NAME}"
+
+          PLAT_COUNT=$(jq '.platforms | length' "release/${MANIFEST_NAME}")
+          if [ "$PLAT_COUNT" -eq 0 ]; then
+            echo "::error::Updater manifest has zero platforms; auto-update would break"
             exit 1
           fi
-          SIGNATURE=$(cat "$SIG_FILE")
 
-          # Find the .app.tar.gz file name for the download URL
-          TAR_FILE=$(find release-files/ -name "*.app.tar.gz" ! -name "*.sig" | head -1)
-          TAR_NAME=$(basename "$TAR_FILE")
+      - name: Generate SHA256SUMS
+        working-directory: release
+        run: |
+          set -euo pipefail
+          find . -maxdepth 1 -type f \
+            ! -name "SHA256SUMS" \
+            ! -name "latest.json" \
+            ! -name "beta.json" \
+            -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS
+          echo "=== SHA256SUMS ==="
+          cat SHA256SUMS
 
-          cat > release-files/latest.json <<MANIFEST
-          {
-            "version": "${VERSION}",
-            "notes": "Grove ${TAG}",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "${SIGNATURE}",
-                "url": "https://github.com/${RELEASES_REPO}/releases/download/${TAG}/${TAR_NAME}"
-              }
-            }
-          }
-          MANIFEST
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: release/grove-${{ needs.resolve.outputs.version }}.cdx.json
+          artifact-name: grove-sbom-${{ needs.resolve.outputs.version }}.cdx.json
 
-          echo "=== latest.json ==="
-          cat release-files/latest.json
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/*.dmg
+            release/*.app.tar.gz
+            release/*.deb
+            release/*.AppImage
+            release/*.AppImage.tar.gz
+            release/*.msi
+            release/*.msi.zip
+            release/*-setup.exe
+            release/*-setup.nsis.zip
 
-      - name: Create release on Grove-Tools/grove-loom
-        uses: softprops/action-gh-release@v2
+      - name: Build release notes
+        id: notes
         env:
-          TAG: ${{ steps.tag.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          MANIFEST: ${{ needs.resolve.outputs.manifest }}
+        shell: bash
+        run: |
+          {
+            echo 'body<<NOTES_EOF'
+            echo "## Grove Desktop ${TAG} (${CHANNEL})"
+            echo
+            echo "### Downloads"
+            echo "- macOS Apple Silicon: \`*_aarch64.dmg\`"
+            echo "- macOS Intel: \`*_x64.dmg\`"
+            echo "- Linux x86_64: \`*.AppImage\` (portable) or \`*.deb\` (Debian/Ubuntu)"
+            echo "- Windows x86_64: \`*-setup.exe\` (NSIS) or \`*.msi\` (MSI)"
+            echo
+            echo "### Verification"
+            echo "1. Download \`SHA256SUMS\` and verify with \`shasum -a 256 -c SHA256SUMS\`"
+            echo "2. Build provenance is attested via SLSA - see \`gh attestation verify\`"
+            echo "3. SBOM (CycloneDX): \`grove-*.cdx.json\`"
+            echo
+            echo "### Auto-update"
+            echo "Manifest: \`${MANIFEST}\` (channel: \`${CHANNEL}\`)"
+            echo NOTES_EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Grove-Tools/grove-loom
+        uses: softprops/action-gh-release@v2
         with:
           repository: Grove-Tools/grove-loom
           token: ${{ secrets.RELEASES_REPO_TOKEN }}
-          tag_name: ${{ steps.tag.outputs.version }}
-          name: "Grove ${{ steps.tag.outputs.version }}"
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: "Grove ${{ needs.resolve.outputs.tag }}"
+          prerelease: ${{ needs.resolve.outputs.prerelease }}
           generate_release_notes: false
-          body: |
-            ## Grove Desktop
-
-            **Download:** macOS (Apple Silicon) — `.dmg` or `.app.tar.gz`
-
-            The app will auto-update from this release.
-          files: release-files/*
+          body: ${{ steps.notes.outputs.body }}
+          files: release/*
+          fail_on_unmatched_files: true

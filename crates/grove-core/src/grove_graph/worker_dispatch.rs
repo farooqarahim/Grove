@@ -32,8 +32,13 @@ pub enum WorkerResult {
 #[derive(Debug)]
 pub enum DispatchOutcome {
     /// Provider returned Ok — check DB for actual step results.
-    Completed,
-    /// Provider returned Err — worker crashed/timed out.
+    /// Carries the provider-side session id observed on this turn (if any),
+    /// which the caller persists so the next dispatch on the same phase can
+    /// cold-resume after registry eviction.
+    Completed { provider_session_id: Option<String> },
+    /// Provider returned Err — worker crashed/timed out. The provider error
+    /// path does not surface a partial session id, so we only carry the
+    /// error string. Persistence on the success path covers the resume case.
     Crashed(String),
 }
 
@@ -78,11 +83,20 @@ pub fn build_chunk_manifest(phase_objective: &str, graph_id: &str, chunk: &StepC
     manifest
 }
 
+/// Build the conversation id used to key the per-phase warm host. Workers
+/// share a host within a phase (so steps in the same phase reuse the
+/// subprocess and prompt cache) but each phase gets its own host so the
+/// context window is bounded and one bad phase cannot contaminate the next.
+pub fn phase_worker_conversation_id(graph_id: &str, phase_id: &str) -> String {
+    format!("hive:{graph_id}:phase:{phase_id}:worker")
+}
+
 /// Dispatch a worker agent to execute a chunk of steps.
 ///
 /// Returns `DispatchOutcome` indicating whether the provider call itself
-/// succeeded or crashed. Actual step results are in the DB — use
-/// `assess_worker_result` to read them.
+/// succeeded or crashed, and the provider-side session id observed (if
+/// any) so the caller can persist it for warm-host cold-resume. Actual
+/// step results are in the DB — use `assess_worker_result` to read them.
 ///
 /// NOTE: This is a blocking function (Provider::execute is sync).
 /// Callers in async contexts should wrap in `tokio::task::spawn_blocking`.
@@ -92,10 +106,12 @@ pub fn dispatch_worker(
     chunk: &StepChunk,
     phase_objective: &str,
     graph_id: &str,
+    phase_id: &str,
     project_root: &Path,
     db_path: &Path,
     model_override: Option<&str>,
     log_dir: Option<&str>,
+    resume_provider_session_id: Option<&str>,
 ) -> GroveResult<DispatchOutcome> {
     let skill_content = skill_loader::load_skill(project_root, "phase-worker");
     let manifest = build_chunk_manifest(phase_objective, graph_id, chunk);
@@ -110,9 +126,11 @@ pub fn dispatch_worker(
     let step_names: Vec<&str> = chunk.steps.iter().map(|s| s.task_name.as_str()).collect();
     info!(
         graph_id,
+        phase_id,
         phase_objective,
         chunk_size = chunk.steps.len(),
         steps = ?step_names,
+        warm_resume = resume_provider_session_id.is_some(),
         "dispatching worker for chunk"
     );
 
@@ -130,26 +148,30 @@ pub fn dispatch_worker(
         model: model_override.map(|s| s.to_string()),
         allowed_tools: None,
         timeout_override: None,
-        provider_session_id: None,
+        provider_session_id: resume_provider_session_id.map(|s| s.to_string()),
         log_dir: log_dir.map(|s| s.to_string()),
         grove_session_id: Some(session_id),
         input_handle_callback: None,
         mcp_config_path: mcp_path,
-        conversation_id: None,
+        conversation_id: Some(phase_worker_conversation_id(graph_id, phase_id)),
     };
 
     let outcome = match provider.execute(&request) {
         Ok(response) => {
             info!(
                 graph_id,
+                phase_id,
                 summary = %response.summary,
                 "worker completed"
             );
-            DispatchOutcome::Completed
+            DispatchOutcome::Completed {
+                provider_session_id: response.provider_session_id,
+            }
         }
         Err(e) => {
             warn!(
                 graph_id,
+                phase_id,
                 error = %e,
                 "worker session failed"
             );
@@ -158,6 +180,13 @@ pub fn dispatch_worker(
     };
 
     // Clean up MCP config.
+    //
+    // NOTE: With the warm path active, the persistent host has already been
+    // spawned with `--mcp-config <path>` and continues to read the file as
+    // it boots/reboots its MCP clients. Removing the file mid-life is safe
+    // for cold spawns but on the warm path it can race with a future
+    // get_or_spawn that needs to re-spawn after eviction. The trade-off here
+    // matches the previous behaviour and keeps temp-file pressure bounded.
     if let Some(ref path) = mcp_config {
         mcp_inject::cleanup_mcp_config(path);
     }

@@ -134,6 +134,16 @@ pub async fn run_graph_loop(
             )
             .await?;
 
+            // Phase has been validated (passed/failed/retrying). Ask the
+            // provider to release the warm subprocess that handled this
+            // phase's workers — the next phase deserves a clean context
+            // (no Judge feedback bleed) and the registry slot is freed for
+            // the next phase. A re-opened phase will respawn and resume via
+            // the persisted `provider_session_id`.
+            provider.evict_warm_session(&worker_dispatch::phase_worker_conversation_id(
+                graph_id, &phase.id,
+            ));
+
             match result {
                 PhaseValidationResult::Passed => {
                     info!(
@@ -197,9 +207,11 @@ pub async fn run_graph_loop(
                         step_outcomes,
                         failed_step_ids,
                     };
-                    match orchestrator_dispatch::dispatch_orchestrator(
+                    match dispatch_orchestrator_with_session(
+                        conn,
                         provider,
                         &decision,
+                        graph_id,
                         project_root,
                         db_path,
                         Some(&log_dir_str),
@@ -250,6 +262,12 @@ pub async fn run_graph_loop(
             grove_graph_repo::update_graph_status(conn, graph_id, "closed")?;
             grove_graph_repo::set_runtime_status(conn, graph_id, RuntimeStatus::Idle.as_str())?;
 
+            // Graph done — release the orchestrator's warm host. The
+            // worker hosts are released at each phase boundary above.
+            provider.evict_warm_session(&orchestrator_dispatch::orchestrator_conversation_id(
+                graph_id,
+            ));
+
             info!(graph_id, "graph execution complete");
             return Ok(LoopIterationResult::GraphComplete);
         }
@@ -286,9 +304,11 @@ pub async fn run_graph_loop(
                     graph_id: graph_id.to_string(),
                     all_steps,
                 };
-                match orchestrator_dispatch::dispatch_orchestrator(
+                match dispatch_orchestrator_with_session(
+                    conn,
                     provider,
                     &decision,
+                    graph_id,
                     project_root,
                     db_path,
                     Some(&log_dir_str),
@@ -370,9 +390,11 @@ pub async fn run_graph_loop(
                     max_chunk_size: chunking::DEFAULT_MAX_CHUNK_SIZE,
                 };
 
-                let response = orchestrator_dispatch::dispatch_orchestrator(
+                let response = dispatch_orchestrator_with_session(
+                    conn,
                     provider,
                     &decision,
+                    graph_id,
                     project_root,
                     db_path,
                     Some(&log_dir_str),
@@ -437,15 +459,18 @@ pub async fn run_graph_loop(
                 }
             }
 
-            // Dispatch worker.
-            let dispatch_outcome = worker_dispatch::dispatch_worker(
+            // Dispatch worker through the per-phase warm host. Resume from
+            // the previous turn's `provider_session_id` if any (so a
+            // registry eviction or daemon restart does not lose context).
+            let dispatch_outcome = dispatch_worker_with_session(
+                conn,
                 provider,
                 chunk,
                 &phase.task_objective,
                 graph_id,
+                &phase.id,
                 project_root,
                 db_path,
-                None,
                 Some(&log_dir_str),
             )?;
 
@@ -480,9 +505,11 @@ pub async fn run_graph_loop(
                     remaining_steps: remaining,
                     error_context: error,
                 };
-                match orchestrator_dispatch::dispatch_orchestrator(
+                match dispatch_orchestrator_with_session(
+                    conn,
                     provider,
                     &decision,
+                    graph_id,
                     project_root,
                     db_path,
                     Some(&log_dir_str),
@@ -566,9 +593,11 @@ pub async fn run_graph_loop(
                             remaining_steps: remaining,
                             error_context: "Worker returned partial results".into(),
                         };
-                        match orchestrator_dispatch::dispatch_orchestrator(
+                        match dispatch_orchestrator_with_session(
+                            conn,
                             provider,
                             &decision,
+                            graph_id,
                             project_root,
                             db_path,
                             Some(&log_dir_str),
@@ -595,6 +624,91 @@ pub async fn run_graph_loop(
 }
 
 // ── Helper Functions ────────────────────────────────────────────────────────
+
+/// Dispatch the graph-scoped orchestrator agent, automatically resuming
+/// from the persisted provider session id and persisting the new id on
+/// success. This is the production wrapper used by the hive loop — direct
+/// callers of `orchestrator_dispatch::dispatch_orchestrator_full` exist only
+/// in tests.
+///
+/// The `provider_session_id` is *best-effort persistence*: if the provider
+/// returns `None` we simply leave the previous value untouched so a future
+/// turn can still resume from it. We never overwrite a stored id with
+/// `None` — losing the resume pointer would force a cold context.
+fn dispatch_orchestrator_with_session(
+    conn: &Connection,
+    provider: &Arc<dyn Provider>,
+    decision: &orchestrator_dispatch::DecisionType,
+    graph_id: &str,
+    project_root: &Path,
+    db_path: &Path,
+    log_dir: Option<&str>,
+) -> GroveResult<String> {
+    let resume = grove_graph_repo::get_graph_orchestrator_session(conn, graph_id)?;
+    let result = orchestrator_dispatch::dispatch_orchestrator_full(
+        provider,
+        decision,
+        graph_id,
+        project_root,
+        db_path,
+        log_dir,
+        resume.as_deref(),
+    )?;
+    if let Some(sid) = &result.provider_session_id {
+        if let Err(e) =
+            grove_graph_repo::set_graph_orchestrator_session(conn, graph_id, Some(sid))
+        {
+            warn!(graph_id, error = %e, "failed to persist orchestrator session id");
+        }
+    }
+    Ok(result.response)
+}
+
+/// Dispatch a worker chunk, automatically resuming from the persisted
+/// per-phase provider session id and persisting the new id on success.
+/// Mirrors `dispatch_orchestrator_with_session` for the worker host.
+#[allow(clippy::too_many_arguments)]
+fn dispatch_worker_with_session(
+    conn: &Connection,
+    provider: &Arc<dyn Provider>,
+    chunk: &chunking::StepChunk,
+    phase_objective: &str,
+    graph_id: &str,
+    phase_id: &str,
+    project_root: &Path,
+    db_path: &Path,
+    log_dir: Option<&str>,
+) -> GroveResult<worker_dispatch::DispatchOutcome> {
+    let resume = grove_graph_repo::get_phase_provider_session(conn, phase_id)?;
+    let outcome = worker_dispatch::dispatch_worker(
+        provider,
+        chunk,
+        phase_objective,
+        graph_id,
+        phase_id,
+        project_root,
+        db_path,
+        None,
+        log_dir,
+        resume.as_deref(),
+    )?;
+
+    // Persist the session id observed on a successful turn so the next
+    // dispatch on this phase can cold-resume after registry eviction. The
+    // crash path doesn't surface a partial session id, so there's nothing
+    // to persist there — but a successful earlier turn would already have
+    // populated the row from a previous call.
+    if let worker_dispatch::DispatchOutcome::Completed {
+        provider_session_id: Some(sid),
+    } = &outcome
+    {
+        if let Err(e) = grove_graph_repo::set_phase_provider_session(conn, phase_id, Some(sid)) {
+            warn!(phase_id, error = %e, "failed to persist phase worker session id");
+        }
+    }
+
+    Ok(outcome)
+}
 
 /// Read the current runtime status from the DB.
 fn check_runtime_status(conn: &Connection, graph_id: &str) -> GroveResult<RuntimeStatus> {
