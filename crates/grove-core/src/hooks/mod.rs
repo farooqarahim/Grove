@@ -189,6 +189,11 @@ fn execute_hook(hook: &HookDefinition, ctx: &HookContext, project_root: &Path) -
 
 /// Simple glob matching: supports `*` (any chars) and `**` (any path segments).
 fn glob_matches(pattern: &str, path: &str) -> bool {
+    let pattern = pattern.replace('\\', "/");
+    let path = path.replace('\\', "/");
+    let pattern = pattern.as_str();
+    let path = path.as_str();
+
     if pattern.contains("**") {
         // Split on ** and check if path contains all segments in order
         let parts: Vec<&str> = pattern.split("**").collect();
@@ -323,6 +328,25 @@ mod tests {
             &guards,
             "builder",
             "config/settings.yaml"
+        ));
+    }
+
+    #[test]
+    fn test_file_guard_normalizes_windows_separators() {
+        let mut guards = HashMap::new();
+        guards.insert(
+            "builder".into(),
+            CapabilityGuard {
+                allowed_paths: vec!["src/**".into()],
+                blocked_paths: vec![],
+                blocked_tools: vec![],
+            },
+        );
+        assert!(check_file_guard(&guards, "builder", "src\\main.rs"));
+        assert!(!check_file_guard(
+            &guards,
+            "builder",
+            "config\\settings.yaml"
         ));
     }
 
