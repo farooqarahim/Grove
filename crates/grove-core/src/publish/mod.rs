@@ -1217,8 +1217,28 @@ fn resolve_command_on_path(binary: &str) -> PathBuf {
     which::which_in(binary, Some(&path), ".").unwrap_or_else(|_| PathBuf::from(binary))
 }
 
+#[cfg(windows)]
+fn command_from_resolved_path(path: PathBuf) -> Command {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
+        let shell = std::env::var_os("COMSPEC").unwrap_or_else(|| "cmd.exe".into());
+        let mut cmd = Command::new(shell);
+        cmd.arg("/C").arg(path);
+        return cmd;
+    }
+    Command::new(path)
+}
+
+#[cfg(not(windows))]
+fn command_from_resolved_path(path: PathBuf) -> Command {
+    Command::new(path)
+}
+
 fn gh_command() -> Command {
-    Command::new(resolve_command_on_path("gh"))
+    command_from_resolved_path(resolve_command_on_path("gh"))
 }
 
 fn run_command_with_timeout(
@@ -1328,14 +1348,17 @@ mod tests {
     }
 
     #[test]
-    fn gh_command_resolves_process_path_shim_first() {
+    fn gh_command_invokes_process_path_shim_first() {
         let _guard = ENV_LOCK.lock().unwrap();
         let bin_dir = tempfile::tempdir().unwrap();
         #[cfg(unix)]
         let gh_path = bin_dir.path().join("gh");
         #[cfg(windows)]
         let gh_path = bin_dir.path().join("gh.cmd");
-        fs::write(&gh_path, "").unwrap();
+        #[cfg(unix)]
+        fs::write(&gh_path, "#!/bin/sh\nprintf '%s %s\\n' \"$1\" \"$2\"\n").unwrap();
+        #[cfg(windows)]
+        fs::write(&gh_path, "@echo off\r\necho %1 %2\r\n").unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1353,6 +1376,13 @@ mod tests {
         let _path_guard = EnvVarGuard::set("PATH", test_path);
 
         assert_eq!(resolve_command_on_path("gh"), gh_path);
+        let output = gh_command().args(["pr", "list"]).output().unwrap();
+        assert!(
+            output.status.success(),
+            "fake gh should run successfully: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "pr list");
     }
 
     #[test]
