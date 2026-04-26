@@ -28,7 +28,7 @@ console      = "0.15"
 indicatif    = "0.17"
 tabled       = "0.15"
 ratatui      = { version = "0.27", optional = true }
-crossterm    = { version = "0.27", optional = true }
+crossterm    = { version = "0.29", optional = true }
 nix          = { workspace = true }
 
 [dev-dependencies]
