@@ -24,6 +24,7 @@ fn init_git_repo() -> TempDir {
     };
 
     git(&["init", "-b", "main"]);
+    git(&["config", "core.autocrlf", "false"]);
     git(&["config", "user.email", "test@grove.local"]);
     git(&["config", "user.name", "Grove Test"]);
     fs::write(path.join("README.md"), "# Task Wave Test\n").unwrap();
