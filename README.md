@@ -4,11 +4,49 @@
 
 You give Grove an objective — `"add pagination to the API"` or `"fix the open GitHub issues marked ready"` — and it plans the work, spawns isolated agent sessions in git worktrees, merges their output, and opens a pull request. All state lives in a local SQLite database. Nothing leaves your machine.
 
+Grove ships with **two equivalent entry points** — use whichever fits your workflow:
+
 ```bash
+# CLI
 grove run "add input validation to the signup form"
 ```
 
-Grove plans the work, spins up agents in isolated worktrees, reviews their output, merges the branches, and creates a PR. You watch from the terminal or the desktop GUI.
+```bash
+# Desktop GUI (Tauri) — same orchestration, visual dashboard
+./scripts/dev.sh           # dev mode with hot reload
+./scripts/dev.sh --build   # production .app bundle
+```
+
+Both drive the same engine — start a run from the CLI and watch it from the GUI, or vice versa. Grove plans the work, spins up agents in isolated worktrees, reviews their output, merges the branches, and creates a PR.
+
+---
+
+## Screenshots
+
+**Project dashboard** — sessions, open issues, automations, and live workspace/PR status side by side.
+
+![Grove project dashboard](docs/assets/01.png)
+
+**New Session** — pick a session type: Bundled run (default), CLI-based, or Hive Loom (graph DAG).
+
+![New Session modal](docs/assets/02.png)
+
+---
+
+## Dev launcher: `./scripts/dev.sh`
+
+`./scripts/dev.sh` is the single entry point for working on Grove locally. It runs preflight checks (Rust, Tauri CLI, Node), installs npm deps if missing, and launches the full dev stack.
+
+```bash
+./scripts/dev.sh             # launch GUI in dev mode (hot reload) — default
+./scripts/dev.sh --build     # production build (native .app bundle)
+./scripts/dev.sh --check     # full CI check suite: fmt, clippy, test
+./scripts/dev.sh --admin     # launch grove-db-lookup (DB explorer)
+./scripts/dev.sh --kill      # kill any running grove-gui instances
+./scripts/dev.sh --help      # show help
+```
+
+Use `--check` before pushing — it mirrors what CI runs.
 
 ---
 
