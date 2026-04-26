@@ -2200,15 +2200,21 @@ fn extract_json(s: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::fs;
     use std::io::Cursor;
     use std::process::Command;
+    #[cfg(unix)]
     use std::sync::{Arc, Mutex};
 
+    #[cfg(unix)]
     use crate::config::PermissionMode;
+    #[cfg(unix)]
     use crate::providers::{NullSink, Provider, ProviderRequest};
 
-    use super::{ClaudeCodeProvider, collect_capped, collect_stream};
+    #[cfg(unix)]
+    use super::ClaudeCodeProvider;
+    use super::{collect_capped, collect_stream};
 
     /// Spawn a long-lived no-op child so we have a valid `Child` handle.
     fn dummy_child() -> std::process::Child {
