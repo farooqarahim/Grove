@@ -91,7 +91,7 @@ impl ClaudeSessionHost {
         resume_session_id: Option<&str>,
         opts: &SpawnOptions,
     ) -> GroveResult<Arc<Self>> {
-        let mut cmd = Command::new(binary);
+        let mut cmd = command_from_binary(binary);
         cmd.arg("-p")
             .arg("--input-format")
             .arg("stream-json")
@@ -226,6 +226,26 @@ impl ClaudeSessionHost {
         let _ = inner.child.start_kill();
         let _ = inner.child.wait().await;
     }
+}
+
+#[cfg(windows)]
+fn command_from_binary(binary: &Path) -> Command {
+    let extension = binary
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
+        let shell = std::env::var_os("COMSPEC").unwrap_or_else(|| "cmd.exe".into());
+        let mut cmd = Command::new(shell);
+        cmd.arg("/C").arg(binary);
+        return cmd;
+    }
+    Command::new(binary)
+}
+
+#[cfg(not(windows))]
+fn command_from_binary(binary: &Path) -> Command {
+    Command::new(binary)
 }
 
 #[cfg(all(test, unix))]

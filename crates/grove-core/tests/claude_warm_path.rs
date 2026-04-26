@@ -1,6 +1,6 @@
 //! Verifies ClaudeCodeProvider takes the warm path when a SessionHostRegistry
 //! is injected AND the request carries a conversation id. Uses a fake claude
-//! shell script so no network calls or real Anthropic API are involved.
+//! command so no network calls or real Anthropic API are involved.
 
 use grove_core::config::PermissionMode;
 use grove_core::providers::claude_code::ClaudeCodeProvider;
@@ -20,20 +20,10 @@ impl StreamSink for CaptureSink {
 fn fake_script() -> tempfile::TempPath {
     let mut f = tempfile::Builder::new()
         .prefix("fake-claude-")
-        .suffix(".sh")
+        .suffix(fake_script_suffix())
         .tempfile()
         .unwrap();
-    writeln!(
-        f,
-        r#"#!/bin/sh
-while IFS= read -r line; do
-  printf '%s\n' '{{"type":"system","session_id":"WARM","model":"fake"}}'
-  printf '%s\n' '{{"type":"assistant","message":{{"content":[{{"type":"text","text":"warm-ack"}}]}}}}'
-  printf '%s\n' '{{"type":"result","subtype":"success","session_id":"WARM","cost_usd":0.0,"is_error":false}}'
-done
-"#
-    )
-    .unwrap();
+    writeln!(f, "{}", fake_script_body()).unwrap();
     f.flush().unwrap();
     #[cfg(unix)]
     {
@@ -43,6 +33,40 @@ done
         std::fs::set_permissions(f.path(), p).unwrap();
     }
     f.into_temp_path()
+}
+
+#[cfg(unix)]
+fn fake_script_suffix() -> &'static str {
+    ".sh"
+}
+
+#[cfg(windows)]
+fn fake_script_suffix() -> &'static str {
+    ".cmd"
+}
+
+#[cfg(unix)]
+fn fake_script_body() -> &'static str {
+    r#"#!/bin/sh
+while IFS= read -r line; do
+  printf '%s\n' '{"type":"system","session_id":"WARM","model":"fake"}'
+  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"warm-ack"}]}}'
+  printf '%s\n' '{"type":"result","subtype":"success","session_id":"WARM","cost_usd":0.0,"is_error":false}'
+done
+"#
+}
+
+#[cfg(windows)]
+fn fake_script_body() -> &'static str {
+    r#"@echo off
+:loop
+set /p line=
+if errorlevel 1 exit /b 0
+echo {"type":"system","session_id":"WARM","model":"fake"}
+echo {"type":"assistant","message":{"content":[{"type":"text","text":"warm-ack"}]}}
+echo {"type":"result","subtype":"success","session_id":"WARM","cost_usd":0.0,"is_error":false}
+goto loop
+"#
 }
 
 fn make_request(prompt: &str, conv_id: &str, worktree: &str) -> ProviderRequest {
