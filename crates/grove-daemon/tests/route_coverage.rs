@@ -110,7 +110,11 @@ fn make_ctx() -> DispatchCtx {
     // Leak the tempdir so paths stay valid for the test's lifetime;
     // OS will reclaim on process exit.
     std::mem::forget(tmp);
-    DispatchCtx::new(cfg, DrainSignal::new(), grove_daemon::session_host::build_registry(900, 8))
+    DispatchCtx::new(
+        cfg,
+        DrainSignal::new(),
+        grove_daemon::session_host::build_registry(900, 8),
+    )
 }
 
 #[tokio::test]

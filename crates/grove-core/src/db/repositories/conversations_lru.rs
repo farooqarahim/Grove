@@ -95,8 +95,16 @@ mod tests {
         conn.execute(
             "INSERT INTO conversations (id, project_id, title, state, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, "p", "t", "active", "2026-04-15T00:00:00Z", "2026-04-15T00:00:00Z"],
-        ).unwrap();
+            params![
+                id,
+                "p",
+                "t",
+                "active",
+                "2026-04-15T00:00:00Z",
+                "2026-04-15T00:00:00Z"
+            ],
+        )
+        .unwrap();
     }
 
     #[test]
@@ -104,11 +112,13 @@ mod tests {
         let (_d, conn) = fresh_db();
         insert_conv(&conn, "a");
         touch_last_access(&conn, "a", 1_000).unwrap();
-        let got: i64 = conn.query_row(
-            "SELECT last_access_at FROM conversations WHERE id='a'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let got: i64 = conn
+            .query_row(
+                "SELECT last_access_at FROM conversations WHERE id='a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(got, 1_000);
     }
 
@@ -118,11 +128,13 @@ mod tests {
         insert_conv(&conn, "a");
         touch_last_access(&conn, "a", 2_000).unwrap();
         touch_last_access(&conn, "a", 1_500).unwrap();
-        let got: i64 = conn.query_row(
-            "SELECT last_access_at FROM conversations WHERE id='a'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let got: i64 = conn
+            .query_row(
+                "SELECT last_access_at FROM conversations WHERE id='a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(got, 2_000);
     }
 
@@ -153,18 +165,18 @@ mod tests {
         let (_d, conn) = fresh_db();
         insert_conv(&conn, "a");
         assert_eq!(mark_pinned(&conn, "a", true).unwrap(), 1);
-        let v: i64 = conn.query_row(
-            "SELECT pinned FROM conversations WHERE id='a'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let v: i64 = conn
+            .query_row("SELECT pinned FROM conversations WHERE id='a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
         assert_eq!(v, 1);
         assert_eq!(mark_pinned(&conn, "a", false).unwrap(), 1);
-        let v: i64 = conn.query_row(
-            "SELECT pinned FROM conversations WHERE id='a'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let v: i64 = conn
+            .query_row("SELECT pinned FROM conversations WHERE id='a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
         assert_eq!(v, 0);
     }
 
@@ -174,17 +186,21 @@ mod tests {
         insert_conv(&conn, "a");
         set_cached_size(&conn, "a", Some(123_456)).unwrap();
         mark_evicted(&conn, "a", 9_999).unwrap();
-        let size: Option<i64> = conn.query_row(
-            "SELECT cached_size_bytes FROM conversations WHERE id='a'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let size: Option<i64> = conn
+            .query_row(
+                "SELECT cached_size_bytes FROM conversations WHERE id='a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert!(size.is_none());
-        let last: i64 = conn.query_row(
-            "SELECT last_access_at FROM conversations WHERE id='a'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let last: i64 = conn
+            .query_row(
+                "SELECT last_access_at FROM conversations WHERE id='a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(last, 9_999);
     }
 }

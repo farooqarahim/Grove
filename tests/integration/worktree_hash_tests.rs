@@ -454,7 +454,7 @@ fn three_way_merge_same_line_produces_markers() {
                 "should have at least one conflict region"
             );
         }
-        other => panic!("expected ThreeWayWithMarkers, got {:?}", other),
+        other => panic!("expected ThreeWayWithMarkers, got {other:?}"),
     }
     assert!(result.has_unresolved_conflicts());
 

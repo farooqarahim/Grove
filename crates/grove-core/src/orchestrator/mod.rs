@@ -183,7 +183,8 @@ pub struct RunOptions {
     /// When `Some`, `build_provider` threads it into `ClaudeCodeProvider` via
     /// `.with_session_registry(...)`. Remains `None` everywhere until the daemon
     /// wires the real registry in Task 11.
-    pub session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
+    pub session_host_registry:
+        Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
 }
 
 impl std::fmt::Debug for RunOptions {
@@ -416,7 +417,9 @@ pub fn build_provider(
     project_root: &Path,
     provider_override: Option<&str>,
     permission_override: Option<PermissionMode>,
-    session_host_registry: Option<std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>>,
+    session_host_registry: Option<
+        std::sync::Arc<dyn crate::providers::session_host::SessionHostRegistry>,
+    >,
 ) -> crate::errors::GroveResult<Arc<dyn Provider>> {
     use crate::errors::GroveError;
     use crate::llm::{LlmAuthMode, LlmProviderKind, LlmRouter};

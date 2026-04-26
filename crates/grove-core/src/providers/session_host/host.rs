@@ -70,8 +70,13 @@ impl ClaudeSessionHost {
         work_dir: &Path,
         resume_session_id: Option<&str>,
     ) -> GroveResult<Arc<Self>> {
-        Self::spawn_with_options(binary, work_dir, resume_session_id, &SpawnOptions::default())
-            .await
+        Self::spawn_with_options(
+            binary,
+            work_dir,
+            resume_session_id,
+            &SpawnOptions::default(),
+        )
+        .await
     }
 
     /// Spawn a persistent host with explicit options. Use this when the host

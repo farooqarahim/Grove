@@ -38,7 +38,7 @@ async fn main() {
                     "id": null,
                     "error": {
                         "code": -32700,
-                        "message": format!("Parse error: {}", e)
+                        "message": format!("Parse error: {e}")
                     }
                 });
                 write_response(&mut stdout, &err_response).await;
@@ -85,7 +85,7 @@ async fn main() {
                         "id": id,
                         "error": {
                             "code": -32601,
-                            "message": format!("Method not found: {}", method)
+                            "message": format!("Method not found: {method}")
                         }
                     });
                     write_response(&mut stdout, &response).await;
@@ -118,7 +118,7 @@ fn parse_args() -> (String, ServerMode) {
                     "graph" => ServerMode::Graph,
                     "run" => ServerMode::Run,
                     other => {
-                        eprintln!("grove-mcp-server: unsupported --mode value: {}", other);
+                        eprintln!("grove-mcp-server: unsupported --mode value: {other}");
                         std::process::exit(1);
                     }
                 };
@@ -143,17 +143,14 @@ fn parse_args() -> (String, ServerMode) {
 
 fn open_db(db_path: &str) -> Connection {
     let conn = Connection::open(db_path).unwrap_or_else(|e| {
-        eprintln!(
-            "grove-mcp-server: failed to open database at {}: {}",
-            db_path, e
-        );
+        eprintln!("grove-mcp-server: failed to open database at {db_path}: {e}");
         std::process::exit(1);
     });
 
     // Enable WAL mode for concurrent read access with the main app
     conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
         .unwrap_or_else(|e| {
-            eprintln!("grove-mcp-server: failed to set PRAGMA: {}", e);
+            eprintln!("grove-mcp-server: failed to set PRAGMA: {e}");
             std::process::exit(1);
         });
 
@@ -162,7 +159,7 @@ fn open_db(db_path: &str) -> Connection {
 
 async fn write_response(stdout: &mut io::Stdout, response: &Value) {
     let serialized = serde_json::to_string(response).expect("failed to serialize JSON response");
-    let line = format!("{}\n", serialized);
+    let line = format!("{serialized}\n");
     let _ = stdout.write_all(line.as_bytes()).await;
     let _ = stdout.flush().await;
 }

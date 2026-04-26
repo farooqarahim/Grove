@@ -1,7 +1,7 @@
 pub mod automations_repo;
-pub mod conversations_lru;
 pub mod chatter_threads_repo;
 pub mod checkpoints_repo;
+pub mod conversations_lru;
 pub mod conversations_repo;
 pub mod events_repo;
 pub mod grove_graph_repo;

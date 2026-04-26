@@ -18,7 +18,7 @@ version = "0.1.1"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["Farooq A. Rahim"]
-rust-version = "1.85"
+rust-version = "1.88"
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -45,7 +45,7 @@ base64 = "0.22"
 portable-pty = "0.8"
 pty-process = { version = "0.5", features = ["async"] }
 libc = "0.2"
-gix = { version = "0.70", default-features = false, features = ["status", "blob-diff", "revision", "dirwalk"] }
+gix = { version = "0.78", default-features = false, features = ["status", "blob-diff", "revision", "dirwalk"] }
 bstr = "1"
 globset = "0.4"
 r2d2 = "0.8"

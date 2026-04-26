@@ -295,13 +295,9 @@ done
             (k_match_b.clone(), tmp2.path().to_path_buf()),
             (k_other.clone(), tmp3.path().to_path_buf()),
         ] {
-            reg.get_or_spawn(
-                k,
-                None,
-                spawn_fake(script.path().to_path_buf(), dir),
-            )
-            .await
-            .unwrap();
+            reg.get_or_spawn(k, None, spawn_fake(script.path().to_path_buf(), dir))
+                .await
+                .unwrap();
         }
         assert_eq!(reg.len().await, 3);
 

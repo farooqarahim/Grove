@@ -16,10 +16,7 @@ pub fn effective_strategy(configured: ConflictStrategy) -> ConflictStrategy {
 
 /// Pure-logic variant of [`effective_strategy`] that takes an explicit
 /// `is_tty` flag — testable without depending on the runtime environment.
-pub fn effective_strategy_with_tty(
-    configured: ConflictStrategy,
-    is_tty: bool,
-) -> ConflictStrategy {
+pub fn effective_strategy_with_tty(configured: ConflictStrategy, is_tty: bool) -> ConflictStrategy {
     match configured {
         ConflictStrategy::Pause if !is_tty => {
             tracing::warn!(

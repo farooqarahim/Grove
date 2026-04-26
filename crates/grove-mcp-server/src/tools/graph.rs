@@ -195,8 +195,7 @@ pub fn update_phase_status(conn: &Connection, params: &Value) -> Result<Value, M
     if !VALID_PHASE_STATUSES.contains(&status) {
         return Err(McpError::InvalidParams {
             message: format!(
-                "invalid status '{}' — valid values: open, inprogress, closed, failed",
-                status
+                "invalid status '{status}' — valid values: open, inprogress, closed, failed"
             ),
         });
     }
@@ -231,8 +230,7 @@ pub fn update_step_status(conn: &Connection, params: &Value) -> Result<Value, Mc
     if !VALID_STEP_STATUSES.contains(&status) {
         return Err(McpError::InvalidParams {
             message: format!(
-                "invalid status '{}' — valid values: open, inprogress, closed, failed",
-                status
+                "invalid status '{status}' — valid values: open, inprogress, closed, failed"
             ),
         });
     }
@@ -318,8 +316,7 @@ pub fn list_graph_phases(conn: &Connection, params: &Value) -> Result<Value, Mcp
 
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT {} FROM graph_phases WHERE graph_id=?1 ORDER BY ordinal",
-            PHASE_COLS
+            "SELECT {PHASE_COLS} FROM graph_phases WHERE graph_id=?1 ORDER BY ordinal"
         ))
         .map_err(|e| McpError::Database {
             operation: "prepare phase list query".into(),
@@ -346,8 +343,7 @@ pub fn list_graph_steps(conn: &Connection, params: &Value) -> Result<Value, McpE
 
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT {} FROM graph_steps WHERE phase_id=?1 ORDER BY ordinal",
-            STEP_COLS
+            "SELECT {STEP_COLS} FROM graph_steps WHERE phase_id=?1 ORDER BY ordinal"
         ))
         .map_err(|e| McpError::Database {
             operation: "prepare step list query".into(),
@@ -374,7 +370,7 @@ pub fn get_graph_progress(conn: &Connection, params: &Value) -> Result<Value, Mc
 
     let graph: Value = conn
         .query_row(
-            &format!("SELECT {} FROM grove_graphs WHERE id=?1", GRAPH_COLS),
+            &format!("SELECT {GRAPH_COLS} FROM grove_graphs WHERE id=?1"),
             params![graph_id],
             graph_row_to_json,
         )
@@ -390,8 +386,7 @@ pub fn get_graph_progress(conn: &Connection, params: &Value) -> Result<Value, Mc
 
     let mut phase_stmt = conn
         .prepare(&format!(
-            "SELECT {} FROM graph_phases WHERE graph_id=?1 ORDER BY ordinal",
-            PHASE_COLS
+            "SELECT {PHASE_COLS} FROM graph_phases WHERE graph_id=?1 ORDER BY ordinal"
         ))
         .map_err(|e| McpError::Database {
             operation: "prepare graph phases query".into(),
@@ -412,8 +407,7 @@ pub fn get_graph_progress(conn: &Connection, params: &Value) -> Result<Value, Mc
 
     let mut step_stmt = conn
         .prepare(&format!(
-            "SELECT {} FROM graph_steps WHERE graph_id=?1 ORDER BY ordinal",
-            STEP_COLS
+            "SELECT {STEP_COLS} FROM graph_steps WHERE graph_id=?1 ORDER BY ordinal"
         ))
         .map_err(|e| McpError::Database {
             operation: "prepare graph steps query".into(),
@@ -507,7 +501,7 @@ pub fn get_step_pipeline_state(conn: &Connection, params: &Value) -> Result<Valu
 
     let step: Value = conn
         .query_row(
-            &format!("SELECT {} FROM graph_steps WHERE id=?1", STEP_COLS),
+            &format!("SELECT {STEP_COLS} FROM graph_steps WHERE id=?1"),
             params![step_id],
             step_row_to_json,
         )

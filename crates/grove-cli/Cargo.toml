@@ -15,7 +15,7 @@ default = []
 tui = ["dep:ratatui", "dep:crossterm"]
 
 [dependencies]
-grove-core   = { path = "../grove-core" }
+grove-core   = { path = "../grove-core", version = "0.1.1" }
 clap         = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }

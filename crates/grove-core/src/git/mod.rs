@@ -474,10 +474,10 @@ fn detect_default_branch_gix(repo: &gix::Repository) -> String {
 }
 
 /// Count commits ahead/behind via `git rev-list --left-right --count`.
-/// gix 0.70's rev_walk doesn't expose `with_hidden()`, so we use a subprocess
+/// gix's rev_walk doesn't expose `with_hidden()`, so we use a subprocess
 /// for this specific operation (it's not on the hot path).
 fn compute_ahead_behind(repo: &gix::Repository, branch: &str, default_branch: &str) -> (i32, i32) {
-    let workdir = match repo.work_dir() {
+    let workdir = match repo.workdir() {
         Some(d) => d,
         None => return (0, 0),
     };
@@ -535,7 +535,7 @@ pub fn commit_log(repo_path: &Path, n: usize) -> Result<Vec<CommitInfo>> {
         let upstream_ref = format!("refs/remotes/origin/{}", branch.shorten().to_str_lossy());
         let _upstream = repo.find_reference(upstream_ref.as_str()).ok()?;
 
-        let workdir = repo.work_dir()?;
+        let workdir = repo.workdir()?;
         let out = std::process::Command::new("git")
             .args(["merge-base", "HEAD", &upstream_ref])
             .current_dir(workdir)
@@ -561,8 +561,9 @@ pub fn commit_log(repo_path: &Path, n: usize) -> Result<Vec<CommitInfo>> {
             let hash = info.id.to_hex().to_string();
             let message = decoded.message.to_str_lossy().into_owned();
             let (subject, body) = split_message(&message);
-            let author_name = decoded.author.name.to_str_lossy().into_owned();
-            let date = chrono::DateTime::from_timestamp(decoded.author.time.seconds, 0)
+            let author = decoded.author().ok()?;
+            let author_name = author.name.to_str_lossy().into_owned();
+            let date = chrono::DateTime::from_timestamp(author.time().ok()?.seconds, 0)
                 .map(|dt: chrono::DateTime<chrono::Utc>| dt.to_rfc3339())
                 .unwrap_or_default();
 
@@ -701,7 +702,7 @@ fn run_ahead_committed(run_worktree: &Path, project_root: &Path, run_id: &str) -
 
 /// Diff two commit OIDs and return `(path, status_char)` pairs.
 ///
-/// Uses `git diff --name-status` subprocess: gix 0.70's tree diff Platform
+/// Uses `git diff --name-status` subprocess: gix tree diff Platform
 /// doesn't expose `track_path()`, which would be needed for path info via the
 /// library API.
 fn tree_diff_file_list(
@@ -709,7 +710,7 @@ fn tree_diff_file_list(
     base_commit: gix::ObjectId,
     head_commit: gix::ObjectId,
 ) -> Result<Vec<(String, String)>> {
-    let workdir = repo.work_dir().context("bare repository")?;
+    let workdir = repo.workdir().context("bare repository")?;
     let base_hex = base_commit.to_hex().to_string();
     let head_hex = head_commit.to_hex().to_string();
 

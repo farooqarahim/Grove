@@ -386,7 +386,7 @@ pub async fn dispatch(
         "grove_run_abort_check" => run::run_abort_check(conn, params),
         "grove_run_budget_status" => run::run_budget_status(conn, params),
         _ => Err(McpError::InvalidParams {
-            message: format!("unknown tool: {}", tool_name),
+            message: format!("unknown tool: {tool_name}"),
         }),
     }
 }

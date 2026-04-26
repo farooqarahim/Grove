@@ -20,7 +20,7 @@ pub fn get_str<'a>(params: &'a Value, key: &str) -> Result<&'a str, McpError> {
         .get(key)
         .and_then(|v| v.as_str())
         .ok_or_else(|| McpError::InvalidParams {
-            message: format!("missing required parameter: {}", key),
+            message: format!("missing required parameter: {key}"),
         })
 }
 
@@ -33,7 +33,7 @@ pub fn get_i64(params: &Value, key: &str) -> Result<i64, McpError> {
         .get(key)
         .and_then(|v| v.as_i64())
         .ok_or_else(|| McpError::InvalidParams {
-            message: format!("missing required parameter: {}", key),
+            message: format!("missing required parameter: {key}"),
         })
 }
 

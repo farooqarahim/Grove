@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUST_TOOLCHAIN: "1.85.0"
+  RUST_TOOLCHAIN: "1.88.0"
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
@@ -35,7 +35,7 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -46,7 +46,7 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -64,7 +64,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-clippy
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings -A clippy::uninlined-format-args
 
   test:
     name: test (${{ matrix.os }})
@@ -74,7 +74,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-14, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -101,18 +101,19 @@ jobs:
     name: cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
           arguments: --all-features --workspace
-          rust-version: "1.85.0"
+          rust-version: "1.88.0"
 
   audit:
     name: cargo-audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v6
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked --version 0.22.1
+      - name: Run cargo-audit
+        run: cargo audit

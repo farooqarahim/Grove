@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RUST_TOOLCHAIN: "1.85.0"
+  RUST_TOOLCHAIN: "1.88.0"
   BIN_NAME: grove
 
 jobs:
@@ -93,7 +93,7 @@ jobs:
             runner: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -161,7 +161,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all CLI archives
         uses: actions/download-artifact@v4

@@ -4,8 +4,8 @@
 
 use grove_core::config::PermissionMode;
 use grove_core::providers::claude_code::ClaudeCodeProvider;
-use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use grove_core::providers::session_host::SessionHostRegistry;
+use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use grove_core::providers::{Provider, ProviderRequest, StreamOutputEvent, StreamSink};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -86,12 +86,10 @@ async fn warm_path_emits_assistant_text_from_registry() {
     // block_in_place + Handle::current() can use this multi-thread runtime.
     let provider_arc = Arc::new(provider);
     let p_for_task = Arc::clone(&provider_arc);
-    let resp = tokio::task::spawn_blocking(move || {
-        p_for_task.execute_streaming(&req, &sink)
-    })
-    .await
-    .unwrap()
-    .expect("warm turn");
+    let resp = tokio::task::spawn_blocking(move || p_for_task.execute_streaming(&req, &sink))
+        .await
+        .unwrap()
+        .expect("warm turn");
 
     assert_eq!(resp.provider_session_id.as_deref(), Some("WARM"));
     assert!(

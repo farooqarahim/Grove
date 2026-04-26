@@ -111,10 +111,7 @@ pub fn complete_pipeline_stage(conn: &Connection, params: &Value) -> Result<Valu
 
     if current_status != "inprogress" {
         return Err(McpError::InvalidParams {
-            message: format!(
-                "stage {} is '{}', expected 'inprogress'",
-                stage_id, current_status
-            ),
+            message: format!("stage {stage_id} is '{current_status}', expected 'inprogress'"),
         });
     }
 

@@ -14,9 +14,7 @@ use grove_core::config::loader::load_or_create;
 use grove_core::db::{DbHandle, DbPool};
 use grove_core::orchestrator::abort_handle::AbortHandle;
 use grove_core::providers::session_host::SessionHostRegistry;
-use grove_core::providers::session_host::registry::{
-    InMemorySessionHostRegistry, RegistryConfig,
-};
+use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use std::time::Duration;
 
 /// Shared application state managed by Tauri.

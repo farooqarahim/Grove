@@ -4,8 +4,8 @@
 //! background task. The registry itself lives in `grove-core` so non-daemon
 //! consumers (e.g. integration tests) can build their own.
 
-use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use grove_core::providers::session_host::SessionHostRegistry;
+use grove_core::providers::session_host::registry::{InMemorySessionHostRegistry, RegistryConfig};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
