@@ -270,6 +270,20 @@ pub trait Provider: Send + Sync {
     /// Inject an abort handle so the provider can register subprocess PIDs
     /// and check for abort between operations. Default: no-op.
     fn set_abort_handle(&self, _handle: crate::orchestrator::abort_handle::AbortHandle) {}
+
+    /// Release any warm persistent host this provider is keeping alive for
+    /// `conversation_id`. The next request with the same id will cold-spawn
+    /// (and resume from `provider_session_id` if one is set on the request).
+    ///
+    /// The hive loop calls this at phase boundaries so:
+    ///   * the next phase starts with a clean Claude Code context (no Judge
+    ///     feedback / role bleed from the prior phase),
+    ///   * registry capacity is freed for the next phase's host.
+    ///
+    /// Default: no-op (providers without a session registry have nothing to
+    /// release). Implementations that hold a registry must perform the
+    /// shutdown themselves.
+    fn evict_warm_session(&self, _conversation_id: &str) {}
 }
 
 pub trait PersistentPhaseProvider: Send + Sync {
@@ -374,6 +388,10 @@ impl Provider for ArcProvider {
 
     fn set_abort_handle(&self, handle: crate::orchestrator::abort_handle::AbortHandle) {
         self.0.set_abort_handle(handle);
+    }
+
+    fn evict_warm_session(&self, conversation_id: &str) {
+        self.0.evict_warm_session(conversation_id);
     }
 }
 

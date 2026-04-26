@@ -1,0 +1,38 @@
+# ── Scheduled Security Audit ─────────────────────────────────────────────────
+#
+# Runs weekly to catch new RustSec advisories and license/source-policy drift
+# even when nobody is opening PRs.
+#
+# Note: this workflow consumes no untrusted user input.
+# -----------------------------------------------------------------------------
+name: security-audit
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: cargo-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features --workspace
+          rust-version: "1.85.0"

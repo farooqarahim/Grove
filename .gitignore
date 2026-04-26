@@ -6,6 +6,10 @@
 # Grove project-specific
 .grove/
 .grove-signing-key
+# Per-worktree token-filter shim artifacts. Created at agent-spawn time
+# by `token_filter::shim::setup` and rebuilt on every run, never committed.
+.grove-filter-bin/
+.grove-filter-state.json
 
 # OS files
 .DS_Store

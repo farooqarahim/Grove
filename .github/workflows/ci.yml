@@ -1,18 +1,118 @@
+# ── Grove CI ─────────────────────────────────────────────────────────────────
+#
+# Runs on every push and PR. Hardened with:
+#   - Pinned Rust toolchain (must match release pipelines)
+#   - Multi-OS test matrix (Linux, macOS, Windows)
+#   - Swatinem/rust-cache for build acceleration
+#   - cargo-deny (licenses, advisories, sources, banned crates)
+#   - cargo-audit (RustSec advisory DB)
+#
+# This workflow does not consume any untrusted PR-body or issue-title inputs;
+# only github.ref / github.workflow are interpolated.
+# -----------------------------------------------------------------------------
 name: ci
+
 on:
   push:
+    branches:
+      - main
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_TOOLCHAIN: "1.85.0"
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
 jobs:
-  quality:
+  fmt:
+    name: rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Format
-        run: cargo fmt --check
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace --all-features
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+      - run: cargo fmt --all --check
 
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - name: Install Linux deps for tauri crate
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-clippy
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Linux deps for tauri crate
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-test-${{ matrix.os }}
+      # Exclude grove-gui (Tauri) from cross-platform default test runs:
+      # it has its own webview/front-end validation in release-desktop.yml.
+      - name: Run tests
+        run: cargo test --workspace --exclude grove-gui --all-features --locked
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features --workspace
+          rust-version: "1.85.0"
+
+  audit:
+    name: cargo-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

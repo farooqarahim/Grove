@@ -11,6 +11,7 @@ use super::gates::{self, GateDecision, PermissionRequest};
 use super::line_reader::{LineError, TimedLineReader};
 use super::session_host::host::ClaudeSessionHost;
 use super::session_host::protocol::StreamEvent as PersistentStreamEvent;
+use super::session_host::host::SpawnOptions;
 use super::session_host::{SessionHostRegistry, SessionKey};
 use super::stream_parser::{self, StreamEvent, StreamResult};
 use super::timeout;
@@ -234,6 +235,22 @@ impl ClaudeCodeProvider {
         let cwd = PathBuf::from(&request.worktree_path);
         let reg = Arc::clone(reg);
 
+        // Capture spawn-time options from the request. The persistent host
+        // cannot have its MCP config, tool allowlist, or permission mode
+        // changed after spawn, so any subsequent turn keyed to the same
+        // SessionKey must be content with the host's existing configuration.
+        // Hive workers and orchestrators rely on `mcp_config_path` to register
+        // grove-mcp-server tools; without it they cannot mark steps closed.
+        let spawn_opts = SpawnOptions {
+            mcp_config_path: request.mcp_config_path.as_ref().map(PathBuf::from),
+            allowed_tools: request.allowed_tools.clone(),
+            // Warm path is gated on PermissionMode::SkipAll by the caller, so
+            // pass --dangerously-skip-permissions unconditionally here. If the
+            // gate ever loosens we will need to thread the actual mode in.
+            skip_permissions: true,
+            model: request.model.clone(),
+        };
+
         let handle = tokio::runtime::Handle::try_current().map_err(|_| {
             GroveError::Runtime(
                 "session-registry warm path requires an active Tokio runtime".into(),
@@ -248,11 +265,13 @@ impl ClaudeCodeProvider {
                         let sid_owned = sid.map(|s| s.to_string());
                         let command = command.clone();
                         let cwd = cwd.clone();
+                        let opts = spawn_opts.clone();
                         Box::pin(async move {
-                            ClaudeSessionHost::spawn(
+                            ClaudeSessionHost::spawn_with_options(
                                 std::path::Path::new(&command),
                                 &cwd,
                                 sid_owned.as_deref(),
+                                &opts,
                             )
                             .await
                         })
@@ -572,6 +591,41 @@ impl Provider for ClaudeCodeProvider {
 
     fn set_abort_handle(&self, handle: AbortHandle) {
         *self.abort_handle.lock().unwrap() = Some(handle);
+    }
+
+    fn evict_warm_session(&self, conversation_id: &str) {
+        let Some(reg) = self.session_registry.clone() else {
+            return;
+        };
+        // Evict for both possible worktree keys is impossible without
+        // knowing the cwd, so the registry's `evict` is keyed on
+        // `SessionKey { conversation_id, work_dir }`. The hive loop owns
+        // exactly one worktree per graph (the conversation worktree), so
+        // we look up via `walk` is unnecessary: callers ensure the warm
+        // host was spawned with the project_root passed to `run_graph_loop`.
+        // We expose an explicit eviction by conversation id only, which the
+        // current registry does not support directly. Fall back to
+        // evicting via known cwd: callers wanting precise eviction should
+        // pair conversation_id with worktree path. For this provider we
+        // perform a best-effort sweep: drain entries whose conversation_id
+        // matches, regardless of work_dir.
+        let conv_owned = conversation_id.to_string();
+        let handle = match tokio::runtime::Handle::try_current() {
+            Ok(h) => h,
+            Err(_) => return,
+        };
+        // The registry trait does not expose enumeration; perform the
+        // eviction async-safely via a helper that downcasts to the
+        // concrete in-memory implementation when possible. Falls back to
+        // a no-op when the registry is opaque.
+        tokio::task::block_in_place(|| {
+            handle.block_on(async move {
+                use super::session_host::registry::InMemorySessionHostRegistry;
+                if let Some(in_mem) = reg.as_any().downcast_ref::<InMemorySessionHostRegistry>() {
+                    in_mem.evict_by_conversation(&conv_owned).await;
+                }
+            })
+        });
     }
 }
 

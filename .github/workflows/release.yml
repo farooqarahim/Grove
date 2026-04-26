@@ -1,58 +1,236 @@
+# ── Grove CLI Release ────────────────────────────────────────────────────────
+#
+# Multi-platform CLI binary pipeline. Produces archived binaries for macOS
+# arm64+x86_64, Linux x86_64, and Windows x86_64, with SHA256SUMS, CycloneDX
+# SBOM, and SLSA build provenance attestations.
+#
+# Triggered by tags matching v*. Stable tags create a public GitHub Release;
+# beta/rc/alpha tags are marked pre-release.
+#
+# All untrusted inputs (tag, ref) flow through env: bindings to avoid
+# script-injection in shell steps.
+# -----------------------------------------------------------------------------
 name: release
+
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag (e.g. v0.2.0 or v0.2.0-beta.1)"
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_TOOLCHAIN: "1.85.0"
+  BIN_NAME: grove
 
 jobs:
-  build-macos:
-    name: Build macOS binary
-    runs-on: macos-latest
+  resolve:
+    name: Resolve tag and channel
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.out.outputs.tag }}
+      version: ${{ steps.out.outputs.version }}
+      prerelease: ${{ steps.out.outputs.prerelease }}
+    steps:
+      - id: out
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$REF_NAME"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not semver-compatible (expected vMAJOR.MINOR.PATCH[-pre])"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          if [[ "$TAG" == *-beta* || "$TAG" == *-rc* || "$TAG" == *-alpha* ]]; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build CLI ${{ matrix.label }}
+    needs: resolve
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-aarch64
+            runner: macos-14
+            target: aarch64-apple-darwin
+          - label: macos-x86_64
+            runner: macos-13
+            target: x86_64-apple-darwin
+          - label: linux-x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - label: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.85.0"
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
 
-      - name: Build release binary
-        run: cargo build --package grove-cli --release
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cli-release-${{ matrix.target }}
+          workspaces: ". -> target"
 
-      - name: Stage artifact
+      - name: Build CLI
+        run: cargo build --package grove-cli --release --target ${{ matrix.target }} --locked
+
+      - name: Stage archive (Unix)
+        if: runner.os != 'Windows'
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          LABEL: ${{ matrix.label }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
         run: |
-          mkdir -p dist
-          cp target/release/grove dist/grove-macos-aarch64
+          set -euo pipefail
+          STAGE="staging/${BIN_NAME}-${VERSION}-${LABEL}"
+          mkdir -p "$STAGE"
+          cp "target/${TARGET}/release/${BIN_NAME}" "$STAGE/"
+          cp README.md LICENSE "$STAGE/" 2>/dev/null || true
+          tar -C staging -czf "${BIN_NAME}-${VERSION}-${LABEL}.tar.gz" "${BIN_NAME}-${VERSION}-${LABEL}"
+          ls -la "${BIN_NAME}-${VERSION}-${LABEL}.tar.gz"
 
-      - name: Upload artifact
+      - name: Stage archive (Windows)
+        if: runner.os == 'Windows'
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          LABEL: ${{ matrix.label }}
+          TARGET: ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          $stage = "staging/$env:BIN_NAME-$env:VERSION-$env:LABEL"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target/$env:TARGET/release/$env:BIN_NAME.exe" "$stage/"
+          Copy-Item README.md, LICENSE -Destination $stage -ErrorAction SilentlyContinue
+          $zip = "$env:BIN_NAME-$env:VERSION-$env:LABEL.zip"
+          Compress-Archive -Path $stage -DestinationPath $zip -Force
+          Get-ChildItem $zip
+
+      - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: grove-macos
-          path: dist/grove-macos-aarch64
+          name: cli-${{ matrix.label }}
+          path: |
+            ${{ env.BIN_NAME }}-${{ needs.resolve.outputs.version }}-${{ matrix.label }}.tar.gz
+            ${{ env.BIN_NAME }}-${{ needs.resolve.outputs.version }}-${{ matrix.label }}.zip
           if-no-files-found: error
+          retention-days: 7
 
-  create-release:
-    name: Create GitHub Release
+  publish:
+    name: Publish CLI release
+    needs: [resolve, build]
     runs-on: ubuntu-latest
-    needs: [build-macos]
-    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download macOS artifact
+      - name: Download all CLI archives
         uses: actions/download-artifact@v4
         with:
-          name: grove-macos
-          path: dist/
+          path: artifacts/
+          pattern: cli-*
+          merge-multiple: true
+
+      - name: Stage release files
+        run: |
+          set -euo pipefail
+          mkdir -p release/
+          find artifacts/ -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Generate SHA256SUMS
+        working-directory: release
+        run: |
+          set -euo pipefail
+          find . -maxdepth 1 -type f ! -name "SHA256SUMS" -print0 \
+            | sort -z | xargs -0 shasum -a 256 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: release/grove-cli-${{ needs.resolve.outputs.version }}.cdx.json
+          artifact-name: grove-cli-sbom-${{ needs.resolve.outputs.version }}.cdx.json
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/*.tar.gz
+            release/*.zip
+
+      - name: Build release notes
+        id: notes
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          {
+            echo 'body<<NOTES_EOF'
+            echo "## Grove CLI ${TAG}"
+            echo
+            echo "### Downloads"
+            echo "- \`grove-*-macos-aarch64.tar.gz\` (Apple Silicon)"
+            echo "- \`grove-*-macos-x86_64.tar.gz\` (Intel Mac)"
+            echo "- \`grove-*-linux-x86_64.tar.gz\`"
+            echo "- \`grove-*-windows-x86_64.zip\`"
+            echo
+            echo "### Verify"
+            echo "1. Download \`SHA256SUMS\` and run \`shasum -a 256 -c SHA256SUMS\`"
+            echo "2. Verify provenance: \`gh attestation verify <file> --repo ${REPO}\`"
+            echo "3. SBOM: \`grove-cli-*.cdx.json\`"
+            echo NOTES_EOF
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Grove ${{ github.ref_name }}"
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: "Grove CLI ${{ needs.resolve.outputs.tag }}"
+          prerelease: ${{ needs.resolve.outputs.prerelease }}
           generate_release_notes: true
-          files: |
-            dist/grove-macos-aarch64
+          body: ${{ steps.notes.outputs.body }}
+          files: release/*
+          fail_on_unmatched_files: true

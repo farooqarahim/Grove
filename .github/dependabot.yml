@@ -1,0 +1,45 @@
+# Dependabot config - https://docs.github.com/en/code-security/dependabot
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      rust-patches:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      rust-minors:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+
+  - package-ecosystem: "npm"
+    directory: "/crates/grove-gui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      npm-patches:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      npm-minors:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      actions-all:
+        patterns:
+          - "*"

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tauri::State;
 
 use grove_core::db::repositories::grove_graph_repo;
@@ -61,11 +63,14 @@ fn resolve_graph_workdir(
 ///
 /// Called after a graph loop finishes (completes, fails, or is aborted) to
 /// automatically start the next graph in the queue. Only one graph per
-/// conversation can run at a time.
+/// conversation can run at a time. The `registry` argument is the
+/// process-wide session host registry from `AppState`; the dequeued graph
+/// inherits the same warm hosts.
 fn dequeue_next_graph(
     pool: &grove_core::db::DbPool,
     workspace_root: &std::path::Path,
     app_handle: &tauri::AppHandle,
+    registry: std::sync::Arc<dyn grove_core::providers::session_host::SessionHostRegistry>,
 ) {
     let conn = match pool.get() {
         Ok(c) => c,
@@ -128,7 +133,7 @@ fn dequeue_next_graph(
         &workdir,
         queued.provider.as_deref(),
         None,
-        None,
+        Some(Arc::clone(&registry)),
     ) {
         Ok(p) => p,
         Err(e) => {
@@ -145,6 +150,7 @@ fn dequeue_next_graph(
     let pool = pool.clone();
     let app_handle = app_handle.clone();
     let gid = graph_id.clone();
+    let registry_for_thread = Arc::clone(&registry);
 
     tauri::async_runtime::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
@@ -180,7 +186,7 @@ fn dequeue_next_graph(
         );
 
         // Recursively dequeue: if this graph also finished, check for the next one.
-        dequeue_next_graph(&pool, &workdir, &app_handle);
+        dequeue_next_graph(&pool, &workdir, &app_handle, registry_for_thread);
     });
 }
 
@@ -228,6 +234,7 @@ pub async fn create_graph_from_spec(
     let pool = state.pool().clone();
     let app_handle = state.app_handle.clone();
     let workspace_root = state.workspace_root().to_path_buf();
+    let registry = state.session_registry();
 
     // ── 1. Create graph, set config, set source path, activate ───────────────
     let graph_id = {
@@ -273,6 +280,7 @@ pub async fn create_graph_from_spec(
     let pool_bg = pool.clone();
     let db_path = grove_core::config::db_path(&workspace_root);
     let provider_override = provider;
+    let registry_bg = Arc::clone(&registry);
 
     tauri::async_runtime::spawn_blocking(move || {
         let result: Result<(), String> = (|| {
@@ -292,7 +300,7 @@ pub async fn create_graph_from_spec(
                 &workdir,
                 provider_override.as_deref().filter(|s| !s.is_empty()),
                 None,
-                None,
+                Some(Arc::clone(&registry_bg)),
             )
             .map_err(|e| e.to_string())?;
 
@@ -432,6 +440,7 @@ pub async fn create_graph_simple(
     let provider_override = provider;
     let model_override = model;
     let pool_bg = pool.clone();
+    let registry_bg = state.session_registry();
 
     tauri::async_runtime::spawn_blocking(move || {
         let result: Result<(), String> = (|| {
@@ -443,7 +452,7 @@ pub async fn create_graph_simple(
                 &workdir,
                 provider_override.as_deref(),
                 None,
-                None,
+                Some(Arc::clone(&registry_bg)),
             )
             .map_err(|e| e.to_string())?;
 
@@ -633,13 +642,20 @@ pub async fn save_graph_document(
     let gid = graph_id.clone();
     let pool_bg = pool.clone();
     let db_path = grove_core::config::db_path(&workspace_root);
+    let registry_bg = state.session_registry();
 
     tauri::async_runtime::spawn_blocking(move || {
         let result: Result<(), String> = (|| {
             let cfg = grove_core::config::GroveConfig::load_or_create(&workdir)
                 .map_err(|e| e.to_string())?;
-            let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
-                .map_err(|e| e.to_string())?;
+            let provider = grove_core::orchestrator::build_provider(
+                &cfg,
+                &workdir,
+                None,
+                None,
+                Some(Arc::clone(&registry_bg)),
+            )
+            .map_err(|e| e.to_string())?;
 
             let rt = tokio::runtime::Handle::current();
             let conn = pool_bg.get().map_err(|e| e.to_string())?;
@@ -728,14 +744,21 @@ pub async fn retry_document_generation(
     let gid = graph_id.clone();
     let obj = objective.clone();
     let pool_bg = pool.clone();
+    let registry_bg = state.session_registry();
 
     tauri::async_runtime::spawn_blocking(move || {
         let result: Result<(), String> = (|| {
             let cfg = grove_core::config::GroveConfig::load_or_create(&project_root)
                 .map_err(|e| e.to_string())?;
 
-            let prov = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
-                .map_err(|e| e.to_string())?;
+            let prov = grove_core::orchestrator::build_provider(
+                &cfg,
+                &workdir,
+                None,
+                None,
+                Some(Arc::clone(&registry_bg)),
+            )
+            .map_err(|e| e.to_string())?;
 
             let skill_text = grove_core::grove_graph::skill_loader::load_skill(
                 &project_root,
@@ -1433,12 +1456,19 @@ pub async fn start_graph_loop(
 
     let db_path = grove_core::config::db_path(&workspace_root);
     let gid = graph_id.clone();
+    let registry = state.session_registry();
 
     // Build the provider for agent execution.
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
-        .map_err(|e| e.to_string())?;
+    let provider = grove_core::orchestrator::build_provider(
+        &cfg,
+        &workdir,
+        None,
+        None,
+        Some(Arc::clone(&registry)),
+    )
+    .map_err(|e| e.to_string())?;
 
     // Set runtime_status to "running" BEFORE spawning the background thread.
     // This prevents the double-click bug: without this, the frontend gets
@@ -1457,6 +1487,7 @@ pub async fn start_graph_loop(
     let app_for_dequeue = app_handle.clone();
     let ws_for_dequeue = workspace_root.clone();
     let conv_id_for_spawn = conversation_id.clone();
+    let registry_for_dequeue = Arc::clone(&registry);
     tauri::async_runtime::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
         let conn = match pool.get() {
@@ -1491,7 +1522,12 @@ pub async fn start_graph_loop(
         );
 
         // When this graph finishes, dequeue the next one in the conversation.
-        dequeue_next_graph(&pool_for_dequeue, &ws_for_dequeue, &app_for_dequeue);
+        dequeue_next_graph(
+            &pool_for_dequeue,
+            &ws_for_dequeue,
+            &app_for_dequeue,
+            registry_for_dequeue,
+        );
     });
 
     emit(
@@ -1562,18 +1598,26 @@ pub async fn resume_graph(state: State<'_, AppState>, graph_id: String) -> Resul
 
     let db_path = grove_core::config::db_path(&workspace_root);
     let gid = graph_id.clone();
+    let registry = state.session_registry();
 
     // Build the provider for agent execution.
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
-        .map_err(|e| e.to_string())?;
+    let provider = grove_core::orchestrator::build_provider(
+        &cfg,
+        &workdir,
+        None,
+        None,
+        Some(Arc::clone(&registry)),
+    )
+    .map_err(|e| e.to_string())?;
 
     // Re-spawn the loop on a blocking thread.
     let pool_for_dequeue = pool.clone();
     let app_for_dequeue = app_handle.clone();
     let ws_for_dequeue = workspace_root.clone();
     let conv_id_for_spawn = conversation_id.clone();
+    let registry_for_dequeue = Arc::clone(&registry);
     tauri::async_runtime::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
         let conn = match pool.get() {
@@ -1608,7 +1652,12 @@ pub async fn resume_graph(state: State<'_, AppState>, graph_id: String) -> Resul
         );
 
         // Dequeue next graph in the conversation.
-        dequeue_next_graph(&pool_for_dequeue, &ws_for_dequeue, &app_for_dequeue);
+        dequeue_next_graph(
+            &pool_for_dequeue,
+            &ws_for_dequeue,
+            &app_for_dequeue,
+            registry_for_dequeue,
+        );
     });
 
     emit(
@@ -1645,7 +1694,8 @@ pub fn abort_graph(state: State<'_, AppState>, graph_id: String) -> Result<(), S
     let pool = state.pool().clone();
     let workspace_root = state.workspace_root().to_path_buf();
     let app_handle = state.app_handle.clone();
-    dequeue_next_graph(&pool, &workspace_root, &app_handle);
+    let registry = state.session_registry();
+    dequeue_next_graph(&pool, &workspace_root, &app_handle, registry);
 
     Ok(())
 }
@@ -1719,18 +1769,28 @@ pub async fn restart_graph(
 
     let db_path = grove_core::config::db_path(&workspace_root);
     let gid = graph_id.clone();
+    let registry = state.session_registry();
 
     // Build the provider for agent execution.
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
-        .map_err(|e| e.to_string())?;
+    let provider = grove_core::orchestrator::build_provider(
+        &cfg,
+        &workdir,
+        None,
+        None,
+        Some(Arc::clone(&registry)),
+    )
+    .map_err(|e| e.to_string())?;
 
     // Re-spawn the loop on a blocking thread.
     let pool_for_spawn = pool.clone();
     let pool_for_dequeue = pool.clone();
     let app_for_dequeue = app_handle.clone();
     let ws_for_dequeue = workspace_root.clone();
+    let registry_for_dequeue = Arc::clone(&registry);
+    let registry_for_failure_dequeue = Arc::clone(&registry);
+    let registry_for_main_dequeue = Arc::clone(&registry);
     tauri::async_runtime::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
         let conn = match pool_for_spawn.get() {
@@ -1758,7 +1818,12 @@ pub async fn restart_graph(
                     "grove://graphs-changed",
                     serde_json::json!({ "graph_id": &gid }),
                 );
-                dequeue_next_graph(&pool_for_dequeue, &ws_for_dequeue, &app_for_dequeue);
+                dequeue_next_graph(
+                    &pool_for_dequeue,
+                    &ws_for_dequeue,
+                    &app_for_dequeue,
+                    registry_for_failure_dequeue,
+                );
                 return;
             }
 
@@ -1778,7 +1843,12 @@ pub async fn restart_graph(
                     "grove://graphs-changed",
                     serde_json::json!({ "graph_id": &gid }),
                 );
-                dequeue_next_graph(&pool_for_dequeue, &ws_for_dequeue, &app_for_dequeue);
+                dequeue_next_graph(
+                    &pool_for_dequeue,
+                    &ws_for_dequeue,
+                    &app_for_dequeue,
+                    registry_for_dequeue,
+                );
                 return;
             }
         }
@@ -1807,7 +1877,12 @@ pub async fn restart_graph(
         );
 
         // Dequeue next graph in the conversation.
-        dequeue_next_graph(&pool_for_dequeue, &ws_for_dequeue, &app_for_dequeue);
+        dequeue_next_graph(
+            &pool_for_dequeue,
+            &ws_for_dequeue,
+            &app_for_dequeue,
+            registry_for_main_dequeue,
+        );
     });
 
     emit(
@@ -1873,11 +1948,18 @@ pub async fn rerun_step(state: State<'_, AppState>, step_id: String) -> Result<(
 
     let db_path = grove_core::config::db_path(&workspace_root);
     let gid = graph_id.clone();
+    let registry = state.session_registry();
 
     let cfg =
         grove_core::config::GroveConfig::load_or_create(&workdir).map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &workdir, None, None, None)
-        .map_err(|e| e.to_string())?;
+    let provider = grove_core::orchestrator::build_provider(
+        &cfg,
+        &workdir,
+        None,
+        None,
+        Some(Arc::clone(&registry)),
+    )
+    .map_err(|e| e.to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
@@ -1976,11 +2058,18 @@ pub async fn rerun_phase(state: State<'_, AppState>, phase_id: String) -> Result
 
     let db_path = grove_core::config::db_path(&workspace_root);
     let gid = graph_id.clone();
+    let registry = state.session_registry();
 
     let cfg = grove_core::config::GroveConfig::load_or_create(&project_root)
         .map_err(|e| e.to_string())?;
-    let provider = grove_core::orchestrator::build_provider(&cfg, &project_root, None, None, None)
-        .map_err(|e| e.to_string())?;
+    let provider = grove_core::orchestrator::build_provider(
+        &cfg,
+        &project_root,
+        None,
+        None,
+        Some(Arc::clone(&registry)),
+    )
+    .map_err(|e| e.to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();

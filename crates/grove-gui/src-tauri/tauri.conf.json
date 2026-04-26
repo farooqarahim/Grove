@@ -31,18 +31,72 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Grove desktop",
+    "longDescription": "Grove is a developer tool for managing AI coding workflows.",
+    "copyright": "Copyright (c) 2026 Grove. All rights reserved.",
+    "publisher": "Grove",
+    "homepage": "https://github.com/Grove-Tools/grove-loom",
     "icon": [
       "icons/icon.icns",
+      "icons/icon.ico",
       "icons/icon.png"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "frameworks": [],
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null,
+      "dmg": {
+        "background": null,
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        }
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ],
+        "section": "devel"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "tsp": false,
+      "wix": {
+        "language": "en-US",
+        "upgradeCode": "8B8B8C7E-2A4A-4C53-B53F-2A1A4D5E9C00"
+      },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "languages": ["English"]
+      }
+    }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGRENEODA2RjQ1RTM3REEKUldUYU4xNzBCdGpjdjJNSXZIQzIraTBROWk2TUE5NjluU3JYZXFib1V4Y1dFbkhkS1p4cWVsTXAK",
       "endpoints": [
         "https://github.com/Grove-Tools/grove-loom/releases/latest/download/latest.json"
-      ]
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
