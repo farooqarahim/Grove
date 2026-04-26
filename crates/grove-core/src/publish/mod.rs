@@ -1190,7 +1190,11 @@ fn command_path() -> String {
     // (e.g. Tauri) where the process PATH may be minimal.
     let process = std::env::var("PATH").unwrap_or_default();
     if !process.is_empty() {
-        return format!("{process}:{shell}");
+        let paths = std::env::split_paths(&process).chain(std::env::split_paths(shell));
+        if let Ok(joined) = std::env::join_paths(paths) {
+            return joined.to_string_lossy().to_string();
+        }
+        return process;
     }
     shell.to_string()
 }
@@ -1402,7 +1406,11 @@ mod tests {
 
         let bin_dir = tempfile::tempdir().unwrap();
         let pr_file = bin_dir.path().join("open_pr");
+        #[cfg(unix)]
         let gh_path = bin_dir.path().join("gh");
+        #[cfg(windows)]
+        let gh_path = bin_dir.path().join("gh.cmd");
+        #[cfg(unix)]
         fs::write(
             &gh_path,
             format!(
@@ -1431,6 +1439,45 @@ esac\n",
             ),
         )
         .unwrap();
+        #[cfg(windows)]
+        fs::write(
+            &gh_path,
+            format!(
+                "@echo off\r\n\
+if \"%1 %2\"==\"pr list\" (\r\n\
+  if exist \"{}\" (\r\n\
+    echo [{{\"number\":1,\"url\":\"https://example.test/pr/1\"}}]\r\n\
+  ) else (\r\n\
+    echo []\r\n\
+  )\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"pr create\" (\r\n\
+  type nul > \"{}\"\r\n\
+  echo https://example.test/pr/1\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"pr edit\" exit /b 0\r\n\
+if \"%1 %2\"==\"pr view\" (\r\n\
+  echo {{\"comments\":[]}}\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"pr comment\" exit /b 0\r\n\
+if \"%1 %2\"==\"issue view\" (\r\n\
+  echo {{\"comments\":[]}}\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%1 %2\"==\"issue comment\" (\r\n\
+  echo issue comment failed 1>&2\r\n\
+  exit /b 1\r\n\
+)\r\n\
+echo unsupported gh invocation: %1 %2 1>&2\r\n\
+exit /b 1\r\n",
+                pr_file.display(),
+                pr_file.display(),
+            ),
+        )
+        .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1440,15 +1487,13 @@ esac\n",
         }
 
         let old_path = std::env::var("PATH").ok();
+        let mut paths = vec![bin_dir.path().to_path_buf()];
+        if let Some(old_path) = old_path.as_deref() {
+            paths.extend(std::env::split_paths(old_path));
+        }
+        let test_path = std::env::join_paths(paths).expect("join PATH");
         unsafe {
-            std::env::set_var(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    bin_dir.path().display(),
-                    old_path.as_deref().unwrap_or("")
-                ),
-            );
+            std::env::set_var("PATH", test_path);
         }
 
         let mut cfg = default_config();

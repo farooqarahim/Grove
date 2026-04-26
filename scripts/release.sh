@@ -11,6 +11,7 @@ export PATH="$HOME/.cargo/bin:$HOME/.rustup/bin:/opt/homebrew/bin:/usr/local/bin
 CONF="crates/grove-gui/src-tauri/tauri.conf.json"
 PKG="crates/grove-gui/package.json"
 CARGO_WS="Cargo.toml"
+CHANGELOG="CHANGELOG.md"
 WORKFLOW="release-desktop.yml"
 RELEASES_REPO="Grove-Tools/grove-loom"
 
@@ -51,6 +52,49 @@ current_branch() { git rev-parse --abbrev-ref HEAD; }
 has_uncommitted() { [ -n "$(git status --porcelain --untracked-files=no)" ]; }
 tag_exists() { git rev-parse "$1" >/dev/null 2>&1; }
 last_tag() { git describe --tags --abbrev=0 2>/dev/null || echo "none"; }
+
+update_changelog() {
+  local version="$1" notes="$2" date tmp
+  date=$(date +%F)
+
+  if grep -Fq "## [${version}]" "$CHANGELOG"; then
+    warn "CHANGELOG already has an entry for ${version}; leaving it unchanged."
+    return
+  fi
+
+  tmp=$(mktemp)
+  awk -v version="$version" -v date="$date" -v notes="$notes" '
+    function release_entry() {
+      printf "## [%s] - %s\n\n", version, date
+      printf "### Changed\n\n"
+      printf "- %s\n\n", notes
+    }
+
+    /^## \[Unreleased\]/ {
+      print
+      in_unreleased = 1
+      next
+    }
+
+    in_unreleased && /^## \[/ && !inserted {
+      release_entry()
+      inserted = 1
+      in_unreleased = 0
+    }
+
+    { print }
+
+    END {
+      if (!inserted) {
+        if (in_unreleased) {
+          print ""
+        }
+        release_entry()
+      }
+    }
+  ' "$CHANGELOG" > "$tmp"
+  mv "$tmp" "$CHANGELOG"
+}
 
 # ── Header ───────────────────────────────────────────────────────────────────
 show_header() {
@@ -130,10 +174,10 @@ menu_release() {
     2) new_version="$v_minor" ;;
     3) new_version="$v_major" ;;
     4)
-      printf "  Enter version (e.g. 1.0.0): "
+      printf "  Enter version (e.g. 1.0.0 or 1.0.0-beta.1): "
       read -r new_version
-      if ! [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        err "Invalid version format. Use semver (e.g. 1.2.3)"
+      if ! [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$ ]]; then
+        err "Invalid version format. Use semver (e.g. 1.2.3 or 1.2.3-beta.1)"
         printf "\n  Press enter to go back..."; read -r; return
       fi
       ;;
@@ -160,7 +204,7 @@ menu_release() {
   printf "  Tag:      ${BOLD}${tag}${RESET}\n"
   printf "  Branch:   ${BOLD}$(current_branch)${RESET}\n"
   printf "  Notes:    ${notes}\n"
-  printf "  Targets:  macOS (arm64)\n"
+  printf "  Targets:  CLI + Desktop matrix (macOS arm64/x64, Linux x86_64, Windows x86_64)\n"
   printf "  Publish:  ${BLUE}github.com/${RELEASES_REPO}${RESET}\n"
   hr
   printf "\n  ${YELLOW}Proceed? (y/n):${RESET} "
@@ -176,20 +220,21 @@ menu_release() {
   sed -i '' "s/\"version\": \"${cur}\"/\"version\": \"${new_version}\"/" "$CONF"
   sed -i '' "s/\"version\": \"${cur}\"/\"version\": \"${new_version}\"/" "$PKG"
   sed -i '' "s/^version = \"${cur}\"/version = \"${new_version}\"/" "$CARGO_WS"
-  ok "Updated $CONF, $PKG, $CARGO_WS"
+  update_changelog "$new_version" "$notes"
+  ok "Updated $CONF, $PKG, $CARGO_WS, $CHANGELOG"
 
   info "Regenerating Cargo.lock..."
   cargo check --quiet 2>/dev/null || cargo generate-lockfile --quiet
   ok "Cargo.lock updated"
 
   info "Committing..."
-  git add "$CONF" "$PKG" "$CARGO_WS" Cargo.lock
+  git add "$CONF" "$PKG" "$CARGO_WS" "$CHANGELOG" Cargo.lock
   git commit -q -m "release: ${tag}"
   ok "Committed release: ${tag}"
 
-  info "Tagging ${tag}..."
-  git tag -a "$tag" -m "$notes"
-  ok "Tag created"
+  info "Creating signed tag ${tag}..."
+  git tag -s "$tag" -m "$notes"
+  ok "Signed tag created"
 
   info "Pushing to origin..."
   git push -q origin HEAD "$tag"
@@ -197,7 +242,7 @@ menu_release() {
 
   printf "\n${GREEN}${BOLD}  ✓ Released ${tag}${RESET}\n"
   printf "  Two workflows triggered:\n"
-  printf "    ${DIM}release.yml${RESET}          → CLI binary on grove-orac\n"
+  printf "    ${DIM}release.yml${RESET}          → CLI archives on this repository\n"
   printf "    ${DIM}release-desktop.yml${RESET}  → Desktop app on ${RELEASES_REPO}\n"
   printf "  Run ${DIM}gh run list --workflow=${WORKFLOW} --limit 1${RESET} to check status.\n"
   printf "\n  Press enter to continue..."; read -r

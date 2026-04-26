@@ -13,7 +13,7 @@ Thank you for your interest in contributing to Grove! This document provides gui
 ## Development Setup
 
 ```bash
-# Ensure Rust 1.85+ is installed
+# Ensure Rust 1.88+ is installed
 rustup update
 
 # Bootstrap the project

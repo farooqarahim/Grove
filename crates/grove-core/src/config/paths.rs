@@ -231,11 +231,7 @@ mod tests {
     #[test]
     fn project_db_dir_skips_grove_virtual_roots() {
         // GroveApp passes ~/.grove/workspaces/<id>/ — must not be double-wrapped.
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let virtual_root = PathBuf::from(&home)
-            .join(".grove")
-            .join("workspaces")
-            .join("test_machine_id");
+        let virtual_root = grove_app_dir().join("workspaces").join("test_machine_id");
         // Even if the dir doesn't exist on disk, the path-prefix check fires.
         let db_dir = project_db_dir(&virtual_root);
         assert_eq!(

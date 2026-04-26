@@ -2,7 +2,7 @@
 
 **Run parallel AI coding agents on your machine. Describe what you want, Grove handles the rest.**
 
-You give Grove an objective — `"add pagination to the API"` or `"fix the open GitHub issues marked ready"` — and it plans the work, spawns isolated agent sessions in git worktrees, merges their output, and opens a pull request. All state lives in a local SQLite database. Nothing leaves your machine.
+You give Grove an objective — `"add pagination to the API"` or `"fix the open GitHub issues marked ready"` — and it plans the work, spawns isolated agent sessions in git worktrees, merges their output, and opens a pull request. Durable Grove state lives in a local SQLite database; prompts, repository context, and tool output may be sent to the coding agents and LLM providers you configure.
 
 Grove ships with **two equivalent entry points** — use whichever fits your workflow:
 
@@ -176,7 +176,7 @@ Grove/
 
 | Dependency | Version | Notes |
 |---|---|---|
-| [Rust](https://rustup.rs/) | 1.85+ | Managed via `rust-toolchain.toml` |
+| [Rust](https://rustup.rs/) | 1.88+ | Managed via `rust-toolchain.toml` |
 | Git | 2.30+ | Required for worktree support |
 | [Node.js](https://nodejs.org/) | 18+ | GUI only |
 | A coding agent CLI | latest | Claude Code (default), Codex, Gemini, etc. |
