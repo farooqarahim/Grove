@@ -11,7 +11,7 @@
 //! `build_provider` wires it into `ClaudeCodeProvider`, two provider calls
 //! flow through.
 //!
-//! Hermetic: `claude` is stubbed by a shell script via `GROVE_CLAUDE_BIN`.
+//! Hermetic: `claude` is stubbed by a test script via `GROVE_CLAUDE_BIN`.
 
 use grove_core::config::{GroveConfig, PermissionMode};
 use grove_core::orchestrator;
@@ -25,20 +25,10 @@ use tempfile::TempPath;
 fn fake_claude_script() -> TempPath {
     let mut f = tempfile::Builder::new()
         .prefix("fake-claude-e2e-")
-        .suffix(".sh")
+        .suffix(fake_claude_script_suffix())
         .tempfile()
         .unwrap();
-    writeln!(
-        f,
-        r#"#!/bin/sh
-while IFS= read -r line; do
-  printf '%s\n' '{{"type":"system","session_id":"E2E","model":"fake"}}'
-  printf '%s\n' '{{"type":"assistant","message":{{"content":[{{"type":"text","text":"e2e-ack"}}]}}}}'
-  printf '%s\n' '{{"type":"result","subtype":"success","session_id":"E2E","cost_usd":0.0,"is_error":false}}'
-done
-"#
-    )
-    .unwrap();
+    writeln!(f, "{}", fake_claude_script_body()).unwrap();
     f.flush().unwrap();
     #[cfg(unix)]
     {
@@ -48,6 +38,40 @@ done
         std::fs::set_permissions(f.path(), p).unwrap();
     }
     f.into_temp_path()
+}
+
+#[cfg(unix)]
+fn fake_claude_script_suffix() -> &'static str {
+    ".sh"
+}
+
+#[cfg(windows)]
+fn fake_claude_script_suffix() -> &'static str {
+    ".cmd"
+}
+
+#[cfg(unix)]
+fn fake_claude_script_body() -> &'static str {
+    r#"#!/bin/sh
+while IFS= read -r line; do
+  printf '%s\n' '{"type":"system","session_id":"E2E","model":"fake"}'
+  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"e2e-ack"}]}}'
+  printf '%s\n' '{"type":"result","subtype":"success","session_id":"E2E","cost_usd":0.0,"is_error":false}'
+done
+"#
+}
+
+#[cfg(windows)]
+fn fake_claude_script_body() -> &'static str {
+    r#"@echo off
+:loop
+set /p line=
+if errorlevel 1 exit /b 0
+echo {"type":"system","session_id":"E2E","model":"fake"}
+echo {"type":"assistant","message":{"content":[{"type":"text","text":"e2e-ack"}]}}
+echo {"type":"result","subtype":"success","session_id":"E2E","cost_usd":0.0,"is_error":false}
+goto loop
+"#
 }
 
 fn test_config(project_root: &Path) -> GroveConfig {
