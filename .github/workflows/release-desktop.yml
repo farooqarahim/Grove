@@ -132,7 +132,7 @@ jobs:
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Validate updater signing key is configured
         shell: bash
@@ -143,7 +143,7 @@ jobs:
           fi
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -254,7 +254,7 @@ jobs:
           ls -la staging/
 
       - name: Upload bundle artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.label }}
           path: staging/
@@ -270,10 +270,10 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all bundle artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts/
           pattern: bundle-*
@@ -375,7 +375,7 @@ jobs:
           artifact-name: grove-sbom-${{ needs.resolve.outputs.version }}.cdx.json
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             release/*.dmg
@@ -417,7 +417,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish to Grove-Tools/grove-loom
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           repository: Grove-Tools/grove-loom
           token: ${{ secrets.RELEASES_REPO_TOKEN }}
