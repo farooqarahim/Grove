@@ -17,7 +17,7 @@ impl StreamSink for CaptureSink {
     }
 }
 
-fn fake_script() -> tempfile::NamedTempFile {
+fn fake_script() -> tempfile::TempPath {
     let mut f = tempfile::Builder::new()
         .prefix("fake-claude-")
         .suffix(".sh")
@@ -42,7 +42,7 @@ done
         p.set_mode(0o755);
         std::fs::set_permissions(f.path(), p).unwrap();
     }
-    f
+    f.into_temp_path()
 }
 
 fn make_request(prompt: &str, conv_id: &str, worktree: &str) -> ProviderRequest {
@@ -70,7 +70,7 @@ async fn warm_path_emits_assistant_text_from_registry() {
     let reg: Arc<dyn SessionHostRegistry> =
         Arc::new(InMemorySessionHostRegistry::new(RegistryConfig::default()));
     let provider = ClaudeCodeProvider::new(
-        script.path().to_string_lossy().to_string(),
+        script.to_string_lossy().to_string(),
         60,
         PermissionMode::SkipAll,
         Vec::new(),
@@ -123,7 +123,7 @@ async fn two_turns_reuse_one_host() {
         Arc::new(InMemorySessionHostRegistry::new(RegistryConfig::default()));
     let provider = Arc::new(
         ClaudeCodeProvider::new(
-            script.path().to_string_lossy().to_string(),
+            script.to_string_lossy().to_string(),
             60,
             PermissionMode::SkipAll,
             Vec::new(),

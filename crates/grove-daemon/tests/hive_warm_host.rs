@@ -27,11 +27,12 @@ use grove_core::orchestrator;
 use grove_core::providers::ProviderRequest;
 use grove_daemon::session_host::build_registry;
 use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tempfile::NamedTempFile;
+use tempfile::TempPath;
 
-fn fake_claude_script() -> NamedTempFile {
+fn fake_claude_script() -> TempPath {
     let mut f = tempfile::Builder::new()
         .prefix("fake-claude-hive-")
         .suffix(".sh")
@@ -56,7 +57,13 @@ done
         p.set_mode(0o755);
         std::fs::set_permissions(f.path(), p).unwrap();
     }
-    f
+    f.into_temp_path()
+}
+
+fn test_config(project_root: &Path) -> GroveConfig {
+    let mut cfg = GroveConfig::load_or_create(project_root).expect("grove config");
+    cfg.providers.claude_code.command = "missing-claude-for-hive-warm-host-test".to_string();
+    cfg
 }
 
 fn make_request(worktree: &str, conv_id: &str, role: &str) -> ProviderRequest {
@@ -94,10 +101,10 @@ async fn worker_steps_in_same_phase_reuse_one_host() {
     let tmp = tempfile::tempdir().unwrap();
     let script = fake_claude_script();
     unsafe {
-        std::env::set_var("GROVE_CLAUDE_BIN", script.path());
+        std::env::set_var("GROVE_CLAUDE_BIN", script.as_os_str());
     }
 
-    let cfg = GroveConfig::load_or_create(tmp.path()).expect("grove config");
+    let cfg = test_config(tmp.path());
     let registry = build_registry(900, 8);
     let provider = orchestrator::build_provider(
         &cfg,
@@ -146,10 +153,10 @@ async fn workers_in_different_phases_get_distinct_hosts() {
     let tmp = tempfile::tempdir().unwrap();
     let script = fake_claude_script();
     unsafe {
-        std::env::set_var("GROVE_CLAUDE_BIN", script.path());
+        std::env::set_var("GROVE_CLAUDE_BIN", script.as_os_str());
     }
 
-    let cfg = GroveConfig::load_or_create(tmp.path()).expect("grove config");
+    let cfg = test_config(tmp.path());
     let registry = build_registry(900, 8);
     let provider = orchestrator::build_provider(
         &cfg,
@@ -197,10 +204,10 @@ async fn orchestrator_decisions_in_same_graph_reuse_one_host() {
     let tmp = tempfile::tempdir().unwrap();
     let script = fake_claude_script();
     unsafe {
-        std::env::set_var("GROVE_CLAUDE_BIN", script.path());
+        std::env::set_var("GROVE_CLAUDE_BIN", script.as_os_str());
     }
 
-    let cfg = GroveConfig::load_or_create(tmp.path()).expect("grove config");
+    let cfg = test_config(tmp.path());
     let registry = build_registry(900, 8);
     let provider = orchestrator::build_provider(
         &cfg,
@@ -245,10 +252,10 @@ async fn orchestrator_and_worker_get_separate_hosts() {
     let tmp = tempfile::tempdir().unwrap();
     let script = fake_claude_script();
     unsafe {
-        std::env::set_var("GROVE_CLAUDE_BIN", script.path());
+        std::env::set_var("GROVE_CLAUDE_BIN", script.as_os_str());
     }
 
-    let cfg = GroveConfig::load_or_create(tmp.path()).expect("grove config");
+    let cfg = test_config(tmp.path());
     let registry = build_registry(900, 8);
     let provider = orchestrator::build_provider(
         &cfg,
@@ -296,10 +303,10 @@ async fn evict_warm_session_releases_phase_worker_host() {
     let tmp = tempfile::tempdir().unwrap();
     let script = fake_claude_script();
     unsafe {
-        std::env::set_var("GROVE_CLAUDE_BIN", script.path());
+        std::env::set_var("GROVE_CLAUDE_BIN", script.as_os_str());
     }
 
-    let cfg = GroveConfig::load_or_create(tmp.path()).expect("grove config");
+    let cfg = test_config(tmp.path());
     let registry = build_registry(900, 8);
     let provider = orchestrator::build_provider(
         &cfg,

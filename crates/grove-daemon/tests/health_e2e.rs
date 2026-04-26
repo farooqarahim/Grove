@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use grove_daemon::config::DaemonConfig;
 use grove_daemon::server::serve;
 use std::io::{BufRead, BufReader, Write};

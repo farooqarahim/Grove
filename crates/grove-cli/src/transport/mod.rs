@@ -248,7 +248,7 @@ impl GroveTransport {
     /// resolve it separately.
     pub fn detect_for_path(project_root: &std::path::Path) -> Self {
         let sock = grove_core::config::paths::daemon_socket_path(project_root);
-        if sock.exists() && std::os::unix::net::UnixStream::connect(&sock).is_ok() {
+        if sock.exists() && socket::SocketTransport::can_connect(&sock) {
             return GroveTransport::Socket(socket::SocketTransport::new(sock));
         }
         let workspace_root = grove_core::config::paths::project_db_dir(project_root);

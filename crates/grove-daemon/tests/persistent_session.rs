@@ -18,10 +18,11 @@ use grove_core::orchestrator;
 use grove_core::providers::ProviderRequest;
 use grove_daemon::session_host::build_registry;
 use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
-use tempfile::NamedTempFile;
+use tempfile::TempPath;
 
-fn fake_claude_script() -> NamedTempFile {
+fn fake_claude_script() -> TempPath {
     let mut f = tempfile::Builder::new()
         .prefix("fake-claude-e2e-")
         .suffix(".sh")
@@ -46,7 +47,13 @@ done
         p.set_mode(0o755);
         std::fs::set_permissions(f.path(), p).unwrap();
     }
-    f
+    f.into_temp_path()
+}
+
+fn test_config(project_root: &Path) -> GroveConfig {
+    let mut cfg = GroveConfig::load_or_create(project_root).expect("grove config");
+    cfg.providers.claude_code.command = "missing-claude-for-persistent-session-test".to_string();
+    cfg
 }
 
 fn make_request(worktree: &str, conv_id: &str) -> ProviderRequest {
@@ -76,10 +83,10 @@ async fn two_calls_same_conversation_reuse_one_persistent_host() {
     // reads GROVE_CLAUDE_BIN once during `build_provider` and caches it in
     // `self.command`, so concurrent tests would not race on the value.
     unsafe {
-        std::env::set_var("GROVE_CLAUDE_BIN", script.path());
+        std::env::set_var("GROVE_CLAUDE_BIN", script.as_os_str());
     }
 
-    let cfg = GroveConfig::load_or_create(tmp.path()).expect("grove config");
+    let cfg = test_config(tmp.path());
     let registry = build_registry(900, 8);
 
     let provider = orchestrator::build_provider(
