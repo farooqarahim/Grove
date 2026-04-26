@@ -42,7 +42,7 @@ reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], def
 dirs = "5"
 keyring = { version = "3", features = ["apple-native", "linux-native"] }
 base64 = "0.22"
-portable-pty = "0.8"
+portable-pty = "0.9"
 pty-process = { version = "0.5", features = ["async"] }
 libc = "0.2"
 gix = { version = "0.78", default-features = false, features = ["status", "blob-diff", "revision", "dirwalk"] }
