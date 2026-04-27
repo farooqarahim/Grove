@@ -8,6 +8,7 @@ import { CreateProjectModal } from "@/components/modals/CreateProjectModal";
 import { NewCliConversationModal } from "@/components/modals/NewCliConversationModal";
 import { NewRunModal } from "@/components/modals/NewRunModal";
 import { SessionNameModal } from "@/components/modals/SessionNameModal";
+import { ScreenLoader } from "@/components/ui/ScreenLoader";
 import { ReviewView } from "@/components/review/ReviewView";
 import { GroveLogo } from "@/components/ui/GroveLogo";
 import type { GitStatusEntry } from "@/lib/api";
@@ -558,11 +559,7 @@ export default function App() {
       {/* Main layout: NavRail + Screen */}
       <div className="flex-1 flex overflow-hidden">
         <NavRail screen={screen} onNavigate={setScreen} openIssueCount={openIssueCount ?? 0} automationCount={automationCount} />
-        <Suspense fallback={
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: C.text4, fontSize: 12 }}>
-            Loading...
-          </div>
-        }>
+        <Suspense fallback={<ScreenLoader />}>
           {renderScreen()}
         </Suspense>
       </div>
